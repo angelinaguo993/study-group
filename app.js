@@ -15,12 +15,28 @@ const currentDate = new Intl.DateTimeFormat('en-US', {
   month: 'long',
   day: 'numeric'
 }).format(new Date());
-const dashboardAssignmentCount = document.querySelectorAll('.assignment-grid .assignment-card').length;
+const dashboardAssignments = document.querySelector('#dashboardAssignments');
+const focusAssignment = document.querySelector('#focusAssignment');
 
 document.querySelector('#studentName').textContent = studentName;
 document.querySelector('#topbarDate').textContent = currentDate;
 document.querySelector('#dashboardDate').textContent = currentDate;
-document.querySelector('#assignmentCount').textContent = `${dashboardAssignmentCount} assignment${dashboardAssignmentCount === 1 ? '' : 's'}`;
+function updateDashboardAssignments() {
+  const overviewAssignments = assignments.slice(1, 4).filter(assignment => !assignment.completed);
+  dashboardAssignments.innerHTML = overviewAssignments.map(assignment => {
+    const index = assignments.indexOf(assignment);
+    const initials = assignment.teacher.split(' ').map(part => part[0]).join('').slice(0, 2);
+    return `<article class="assignment-card" data-assignment="${index}"><div class="card-meta"><span class="course-tag ${assignmentTagColor(assignment.subject)}">${assignment.course}</span><span>Due ${assignment.due}</span></div><h3>${assignment.title}</h3><p>${assignment.description}</p><div class="card-bottom"><span class="teacher"><i class="mini-avatar">${initials}</i> ${assignment.teacher}</span><button class="circle-check dashboard-check" aria-label="Complete assignment">✓</button></div></article>`;
+  }).join('');
+  const focusComplete = assignments[0].completed;
+  focusAssignment.hidden = focusComplete;
+  const focusButton = document.querySelector('#completeFocus');
+  focusButton.classList.toggle('completed', focusComplete);
+  focusButton.innerHTML = focusComplete ? '<span>✓</span> Completed' : '<span>✓</span> Mark complete';
+  const remaining = overviewAssignments.length;
+  document.querySelector('#assignmentCount').textContent = `${remaining} assignment${remaining === 1 ? '' : 's'}`;
+}
+updateDashboardAssignments();
 
 const homeworkList = document.querySelector('#homeworkList');
 const courseFilter = document.querySelector('#courseFilter');
@@ -33,7 +49,7 @@ function matchingAssignments() {
   const course = courseFilter.value;
   return assignments.filter(a => {
     const matchesTab = activeHomeworkFilter === 'all' ||
-      (activeHomeworkFilter === 'yours' && scheduledClasses.has(a.course)) ||
+      (activeHomeworkFilter === 'yours' && scheduledClasses.has(a.course) && !a.completed) ||
       (activeHomeworkFilter === 'week' && a.thisWeek) ||
       (activeHomeworkFilter === 'completed' && a.completed);
     return matchesTab && (course === 'All classes' || a.course === course);
@@ -41,7 +57,7 @@ function matchingAssignments() {
 }
 function updateFilterCounts() {
   const counts = {
-    yours: assignments.filter(a => scheduledClasses.has(a.course)).length,
+    yours: assignments.filter(a => scheduledClasses.has(a.course) && !a.completed).length,
     week: assignments.filter(a => a.thisWeek).length,
     completed: assignments.filter(a => a.completed).length,
     all: assignments.length
@@ -55,6 +71,7 @@ function renderHomework() {
     return `<article class="homework-row ${a.completed ? 'is-complete' : ''}"><span class="subject-dot ${a.subject}">${assignmentIcon(a.subject)}</span><div class="homework-main"><span class="course-tag ${assignmentTagColor(a.subject)}">${a.course}</span><h3>${a.title}</h3><p>${a.description}</p><small>${a.teacher} · Posted yesterday</small></div><div class="homework-due"><b>${a.due}</b><small>Due date</small></div><button class="circle-check homework-check ${a.completed ? 'done' : ''}" data-assignment="${index}" aria-label="${a.completed ? 'Mark incomplete' : 'Mark complete'}">✓</button></article>`;
   }).join('') : '<p class="empty-homework">No assignments found for this view.</p>';
   updateFilterCounts();
+  updateDashboardAssignments();
 }
 renderHomework();
 
@@ -101,10 +118,15 @@ document.querySelector('#completeFocus').addEventListener('click', e => {
   renderHomework();
   toast(assignment.completed ? 'Problem Set 3.4 marked complete.' : 'Problem Set 3.4 marked incomplete.');
 });
-document.querySelectorAll('.assignment-card .circle-check').forEach(button => button.addEventListener('click', () => {
-  button.classList.toggle('done');
-  toast(button.classList.contains('done') ? 'Marked as complete. Nice work!' : 'Marked as incomplete.');
-}));
+dashboardAssignments.addEventListener('click', event => {
+  const button = event.target.closest('.dashboard-check');
+  if (!button) return;
+  const card = button.closest('.assignment-card');
+  const assignment = assignments[Number(card.dataset.assignment)];
+  assignment.completed = true;
+  renderHomework();
+  toast('Marked as complete. Nice work!');
+});
 document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
   activeHomeworkFilter = button.dataset.filter;
   document.querySelectorAll('.filter').forEach(item => item.classList.toggle('active', item === button));
@@ -112,12 +134,89 @@ document.querySelectorAll('.filter').forEach(button => button.addEventListener('
 }));
 courseFilter.addEventListener('change', renderHomework);
 const modal = document.querySelector('#modal');
-function openModal(title, text) { document.querySelector('#modalTitle').textContent = title; document.querySelector('#modalText').textContent = text; modal.classList.add('open'); }
+const modalEyebrow = document.querySelector('#modalEyebrow');
+const modalFields = document.querySelector('#modalFields');
+let modalType = 'correction';
+function openModal(title, text, type = 'correction') {
+  modalType = type;
+  document.querySelector('#modalTitle').textContent = title;
+  document.querySelector('#modalText').textContent = text;
+  modalEyebrow.hidden = type === 'correction';
+  modalFields.innerHTML = type === 'resource'
+    ? '<label>Title<input id="resourceTitle" type="text" placeholder="e.g., Unit 3 study guide" required></label><label>Link<input id="resourceLink" type="url" placeholder="https://" required></label><label>Description<textarea id="resourceDescription" placeholder="What is this material good for?" required></textarea></label>'
+    : type === 'discussion'
+    ? '<label>Title of post<input id="discussionTitle" type="text" placeholder="What do you want to discuss?" required></label><label>Description of post<textarea id="discussionDescription" placeholder="Add context or a question for your classmates." required></textarea></label>'
+    : '<textarea placeholder="Describe the issue or update…"></textarea>';
+  document.querySelector('#submitModal').textContent = type === 'resource' ? 'Share resource' : type === 'discussion' ? 'Create post' : 'Send request';
+  modal.classList.add('open');
+}
 document.querySelector('#requestEdit').addEventListener('click', ()=>openModal('Request a correction', "Tell the moderators what needs updating. They'll review it shortly."));
-document.querySelector('#shareResource').addEventListener('click', ()=>openModal('Share a resource', 'Help your classmates by sharing a link, guide, or study material.'));
+document.querySelector('#shareResource').addEventListener('click', ()=>openModal('Share a resource', 'Help your classmates by sharing a link, guide, or study material.', 'resource'));
+const addDiscussion = document.querySelector('.dots');
+addDiscussion.textContent = '+';
+addDiscussion.classList.add('add-discussion');
+addDiscussion.setAttribute('aria-label', 'Create discussion post');
+addDiscussion.addEventListener('click', ()=>openModal('Create a discussion post', 'Share a question, idea, or study tip with your classmates.', 'discussion'));
 document.querySelector('#closeModal').addEventListener('click', ()=>modal.classList.remove('open'));
 modal.addEventListener('click', e=> { if(e.target === modal) modal.classList.remove('open'); });
-document.querySelector('#submitModal').addEventListener('click', ()=> { modal.classList.remove('open'); toast('Sent to the StudyGroup team.'); });
+document.querySelector('#submitModal').addEventListener('click', ()=> {
+  if (modalType === 'resource') {
+    const title = document.querySelector('#resourceTitle').value.trim();
+    const link = document.querySelector('#resourceLink').value.trim();
+    const description = document.querySelector('#resourceDescription').value.trim();
+    if (!title || !link || !description) return toast('Please complete all three resource fields.');
+    const resource = document.createElement('article');
+    resource.className = 'resource-card';
+    resource.innerHTML = '<div class="resource-icon green-paper">↗</div><div><span class="resource-type">SHARED RESOURCE</span><h3></h3><p></p><a class="resource-link" target="_blank" rel="noopener">Open resource →</a></div><button>⌑</button>';
+    resource.querySelector('h3').textContent = title;
+    resource.querySelector('p').textContent = description;
+    resource.querySelector('.resource-link').href = link;
+    document.querySelector('.resource-grid').prepend(resource);
+    modal.classList.remove('open');
+    return toast('Resource shared with your study group.');
+  }
+  if (modalType === 'discussion') {
+    const title = document.querySelector('#discussionTitle').value.trim();
+    const description = document.querySelector('#discussionDescription').value.trim();
+    if (!title || !description) return toast('Please add a title and description.');
+    const post = document.createElement('article');
+    post.className = 'community-post';
+    post.innerHTML = '<div class="post-head"><i class="mini-avatar green">AG</i><div><b>Alex Green</b><p>Just now</p></div></div><h3 class="discussion-title"></h3><p class="discussion-description"></p><div class="post-actions"><button class="heart-button" aria-label="Like post">♡ <span>0</span></button><button class="replies-toggle" aria-expanded="false">◌ <span>0 replies</span></button></div><div class="replies" hidden></div>';
+    post.querySelector('.discussion-title').textContent = title;
+    post.querySelector('.discussion-description').textContent = description;
+    document.querySelector('.discussion-feed').prepend(post);
+    modal.classList.remove('open');
+    return toast('Discussion post created.');
+  }
+  modal.classList.remove('open');
+  toast('Sent to the StudyGroup team.');
+});
 document.querySelector('#editSchedule').addEventListener('click', ()=>document.querySelector('[data-view="settings"]').click());
 document.querySelector('#searchButton').addEventListener('click', ()=>toast('Search is coming soon. Try browsing your classes.'));
 document.querySelector('#profileButton').addEventListener('click', ()=>toast('Signed in as Alex Green · Student'));
+document.querySelectorAll('.community-post').forEach(post => {
+  post.querySelector('.post-actions button')?.classList.add('heart-button');
+  post.querySelectorAll('.replies p').forEach(reply => {
+    const heart = document.createElement('button');
+    heart.className = 'heart-button reply-heart';
+    heart.setAttribute('aria-label', 'Like reply');
+    heart.innerHTML = '♡ <span>0</span>';
+    reply.append(' ', heart);
+  });
+});
+document.querySelector('.discussion-feed').addEventListener('click', event => {
+  const heart = event.target.closest('.heart-button');
+  if (heart) {
+    const count = heart.querySelector('span');
+    const liked = heart.classList.toggle('liked');
+    count.textContent = Math.max(0, Number(count.textContent) + (liked ? 1 : -1));
+    heart.firstChild.textContent = liked ? '♥ ' : '♡ ';
+    return;
+  }
+  const button = event.target.closest('.replies-toggle');
+  if (!button) return;
+  const replies = button.closest('.community-post').querySelector('.replies');
+  const isOpen = !replies.hidden;
+  replies.hidden = isOpen;
+  button.setAttribute('aria-expanded', String(!isOpen));
+});
