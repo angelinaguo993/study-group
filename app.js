@@ -75,10 +75,15 @@ function renderHomework() {
 }
 renderHomework();
 
-const events = {1:['Calculus', 'blue-bg'], 3:['Chemistry lab', 'purple-bg'], 8:['English reading', 'orange-bg'], 10:['Problem Set 3.4', 'blue-bg'], 11:['Chem lab report', 'purple-bg'], 14:['History analysis', 'gold-bg'], 16:['Calculus quiz', 'blue-bg'], 18:['English seminar', 'orange-bg'], 21:['Silk Roads due', 'gold-bg']};
+const events = {
+  8: { 15: ['Picture Day', 'event-bg'] },
+  9: { 1: ['Calculus', 'blue-bg'], 3: ['Chemistry lab', 'purple-bg'], 8: ['English reading', 'orange-bg'], 10: ['Problem Set 3.4', 'blue-bg'], 11: ['Chem lab report', 'purple-bg'], 14: ['History analysis', 'gold-bg'], 16: ['Calculus quiz', 'blue-bg'], 18: ['English seminar', 'orange-bg'], 21: ['Silk Roads due', 'gold-bg'], 30: ['First quarter ending', 'event-bg'] },
+  10: { 11: ['Veterans Day — No school', 'event-bg'] }
+};
 const grid = document.querySelector('#calendarGrid');
 const calendarMonth = document.querySelector('#calendarMonth');
-const currentMonthIndex = new Date().getMonth();
+const currentMonthIndex = 9;
+const currentDay = 21;
 let displayedMonth = currentMonthIndex;
 function renderCalendar() {
   const year = 2026;
@@ -90,8 +95,8 @@ function renderCalendar() {
   grid.innerHTML = Array.from({ length: totalCells }, (_, index) => {
     const day = index - mondayFirstOffset + 1;
     const isCurrentMonth = day > 0 && day <= daysInMonth;
-    const event = isCurrentMonth ? events[day] : null;
-    const isToday = isCurrentMonth && displayedMonth === currentMonthIndex && day === new Date().getDate();
+    const event = isCurrentMonth ? events[displayedMonth]?.[day] : null;
+    const isToday = isCurrentMonth && displayedMonth === currentMonthIndex && day === currentDay;
     return `<div class="day ${isToday ? 'today' : ''} ${!isCurrentMonth ? 'empty-day' : ''}"><span>${isCurrentMonth ? day : ''}</span>${event ? `<div class="calendar-event ${event[1]}">${event[0]}</div>` : ''}</div>`;
   }).join('');
 }
@@ -108,7 +113,7 @@ homeworkList.addEventListener('click', event => {
   const assignment = assignments[Number(button.dataset.assignment)];
   assignment.completed = !assignment.completed;
   renderHomework();
-  toast(assignment.completed ? 'Marked as complete. Nice work!' : 'Marked as incomplete.');
+  toast(assignment.completed ? 'Marked as completed.' : 'Marked as incomplete.');
 });
 document.querySelector('#completeFocus').addEventListener('click', e => {
   const assignment = assignments[0];
@@ -116,7 +121,7 @@ document.querySelector('#completeFocus').addEventListener('click', e => {
   e.currentTarget.classList.toggle('completed', assignment.completed);
   e.currentTarget.innerHTML = assignment.completed ? '<span>✓</span> Completed' : '<span>✓</span> Mark complete';
   renderHomework();
-  toast(assignment.completed ? 'Problem Set 3.4 marked complete.' : 'Problem Set 3.4 marked incomplete.');
+  toast(assignment.completed ? 'Marked as completed.' : 'Marked as incomplete.');
 });
 dashboardAssignments.addEventListener('click', event => {
   const button = event.target.closest('.dashboard-check');
@@ -125,7 +130,7 @@ dashboardAssignments.addEventListener('click', event => {
   const assignment = assignments[Number(card.dataset.assignment)];
   assignment.completed = true;
   renderHomework();
-  toast('Marked as complete. Nice work!');
+  toast('Marked as completed.');
 });
 document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
   activeHomeworkFilter = button.dataset.filter;
@@ -143,7 +148,7 @@ function openModal(title, text, type = 'correction') {
   document.querySelector('#modalText').textContent = text;
   modalEyebrow.hidden = type === 'correction';
   modalFields.innerHTML = type === 'resource'
-    ? '<label>Title<input id="resourceTitle" type="text" placeholder="e.g., Unit 3 study guide" required></label><label>Link<input id="resourceLink" type="url" placeholder="https://" required></label><label>Description<textarea id="resourceDescription" placeholder="What is this material good for?" required></textarea></label>'
+    ? '<label>Title<input id="resourceTitle" type="text" placeholder="e.g., Unit 3 study guide" required></label><label>Category<select id="resourceCategory" required><option value="notes">Notes</option><option value="practice">Practice</option><option value="study guide">Study guide</option><option value="other">Other</option></select></label><label>Link<input id="resourceLink" type="url" placeholder="https://" required></label><label>Description<textarea id="resourceDescription" placeholder="What is this material good for?" required></textarea></label>'
     : type === 'discussion'
     ? '<label>Title of post<input id="discussionTitle" type="text" placeholder="What do you want to discuss?" required></label><label>Description of post<textarea id="discussionDescription" placeholder="Add context or a question for your classmates." required></textarea></label>'
     : '<textarea placeholder="Describe the issue or update…"></textarea>';
@@ -162,12 +167,14 @@ modal.addEventListener('click', e=> { if(e.target === modal) modal.classList.rem
 document.querySelector('#submitModal').addEventListener('click', ()=> {
   if (modalType === 'resource') {
     const title = document.querySelector('#resourceTitle').value.trim();
+    const category = document.querySelector('#resourceCategory').value;
     const link = document.querySelector('#resourceLink').value.trim();
     const description = document.querySelector('#resourceDescription').value.trim();
     if (!title || !link || !description) return toast('Please complete all three resource fields.');
     const resource = document.createElement('article');
     resource.className = 'resource-card';
-    resource.innerHTML = '<div class="resource-icon green-paper">↗</div><div><span class="resource-type">SHARED RESOURCE</span><h3></h3><p></p><a class="resource-link" target="_blank" rel="noopener">Open resource →</a></div><button>⌑</button>';
+    resource.innerHTML = '<div class="resource-icon green-paper">↗</div><div><span class="resource-type"></span><h3></h3><p></p><a class="resource-link" target="_blank" rel="noopener">Open resource →</a></div><button>⌑</button>';
+    resource.querySelector('.resource-type').textContent = category.toUpperCase();
     resource.querySelector('h3').textContent = title;
     resource.querySelector('p').textContent = description;
     resource.querySelector('.resource-link').href = link;
@@ -184,6 +191,7 @@ document.querySelector('#submitModal').addEventListener('click', ()=> {
     post.innerHTML = '<div class="post-head"><i class="mini-avatar green">AG</i><div><b>Alex Green</b><p>Just now</p></div></div><h3 class="discussion-title"></h3><p class="discussion-description"></p><div class="post-actions"><button class="heart-button" aria-label="Like post">♡ <span>0</span></button><button class="replies-toggle" aria-expanded="false">◌ <span>0 replies</span></button></div><div class="replies" hidden></div>';
     post.querySelector('.discussion-title').textContent = title;
     post.querySelector('.discussion-description').textContent = description;
+    setupDiscussionPost(post);
     document.querySelector('.discussion-feed').prepend(post);
     modal.classList.remove('open');
     return toast('Discussion post created.');
@@ -194,16 +202,25 @@ document.querySelector('#submitModal').addEventListener('click', ()=> {
 document.querySelector('#editSchedule').addEventListener('click', ()=>document.querySelector('[data-view="settings"]').click());
 document.querySelector('#searchButton').addEventListener('click', ()=>toast('Search is coming soon. Try browsing your classes.'));
 document.querySelector('#profileButton').addEventListener('click', ()=>toast('Signed in as Alex Green · Student'));
-document.querySelectorAll('.community-post').forEach(post => {
+function setupDiscussionPost(post) {
   post.querySelector('.post-actions button')?.classList.add('heart-button');
   post.querySelectorAll('.replies p').forEach(reply => {
+    if (reply.querySelector('.reply-heart')) return;
     const heart = document.createElement('button');
     heart.className = 'heart-button reply-heart';
     heart.setAttribute('aria-label', 'Like reply');
     heart.innerHTML = '♡ <span>0</span>';
     reply.append(' ', heart);
   });
-});
+  const replies = post.querySelector('.replies');
+  if (!replies.querySelector('.reply-composer')) {
+    const composer = document.createElement('form');
+    composer.className = 'reply-composer';
+    composer.innerHTML = '<label>reply</label><div><input class="reply-input" type="text" placeholder="Write a reply…" aria-label="Write a reply"><button type="submit">Post</button></div>';
+    replies.append(composer);
+  }
+}
+document.querySelectorAll('.community-post').forEach(setupDiscussionPost);
 document.querySelector('.discussion-feed').addEventListener('click', event => {
   const heart = event.target.closest('.heart-button');
   if (heart) {
@@ -219,4 +236,26 @@ document.querySelector('.discussion-feed').addEventListener('click', event => {
   const isOpen = !replies.hidden;
   replies.hidden = isOpen;
   button.setAttribute('aria-expanded', String(!isOpen));
+});
+document.querySelector('.discussion-feed').addEventListener('submit', event => {
+  const composer = event.target.closest('.reply-composer');
+  if (!composer) return;
+  event.preventDefault();
+  const input = composer.querySelector('.reply-input');
+  const replyText = input.value.trim();
+  if (!replyText) return;
+  const reply = document.createElement('p');
+  reply.innerHTML = '<b>Alex Green</b> · ';
+  reply.append(replyText);
+  const heart = document.createElement('button');
+  heart.className = 'heart-button reply-heart';
+  heart.setAttribute('aria-label', 'Like reply');
+  heart.innerHTML = '♡ <span>0</span>';
+  reply.append(' ', heart);
+  composer.before(reply);
+  input.value = '';
+  const toggle = composer.closest('.community-post').querySelector('.replies-toggle span');
+  const count = Number(toggle.textContent.match(/\d+/)?.[0] || 0) + 1;
+  toggle.textContent = `${count} ${count === 1 ? 'reply' : 'replies'}`;
+  toast('Reply posted.');
 });
