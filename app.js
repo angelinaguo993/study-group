@@ -8,6 +8,16 @@ const assignments = [
 ];
 const scheduledClasses = new Set(['AP Calculus AB', 'Chemistry', 'English 10']);
 let activeHomeworkFilter = 'yours';
+const resources = [
+  { title: 'Derivative rules at a glance', type: 'Study guide', subject: 'AP Calc', collection: 'AP', author: 'Maya Thompson', icon: '✦', color: 'green-paper' },
+  { title: 'Calorimetry practice problems', type: 'Practice', subject: 'Chemistry', collection: 'IB', author: 'Jordan Lee', icon: '▤', color: 'purple-paper' },
+  { title: 'Things Fall Apart themes', type: 'Notes', subject: 'English 10', collection: 'elective', author: 'Sam Patel', icon: '▰', color: 'orange-paper' },
+  { title: 'Digital SAT math formula sheet', type: 'Study guide', subject: 'Math', collection: 'SAT', author: 'Avery Chen', icon: '∑', color: 'green-paper' },
+  { title: 'ACT science timing drills', type: 'Practice', subject: 'Science', collection: 'ACT', author: 'Maya Thompson', icon: '◌', color: 'purple-paper' },
+  { title: 'College essay brainstorming prompts', type: 'Notes', subject: 'Writing', collection: 'other', author: 'Jordan Lee', icon: '✎', color: 'orange-paper' }
+];
+let activeResourceCollection = 'all';
+let activeResourceSubject = 'all';
 
 const studentName = document.querySelector('#profileButton b').textContent.split(' ')[0];
 const currentDate = new Intl.DateTimeFormat('en-US', {
@@ -138,6 +148,30 @@ document.querySelectorAll('.filter').forEach(button => button.addEventListener('
   renderHomework();
 }));
 courseFilter.addEventListener('change', renderHomework);
+
+const resourceGrid = document.querySelector('#resourceGrid');
+const resourceSubjectFilter = document.querySelector('#resourceSubjectFilter');
+function renderResources() {
+  const subjects = [...new Set(resources.map(resource => resource.subject))];
+  const selectedSubject = resourceSubjectFilter.value;
+  resourceSubjectFilter.innerHTML = `<option value="all">All subjects</option>${subjects.map(subject => `<option value="${subject}">${subject}</option>`).join('')}`;
+  resourceSubjectFilter.value = subjects.includes(selectedSubject) ? selectedSubject : 'all';
+  const visibleResources = resources.filter(resource =>
+    (activeResourceCollection === 'all' || resource.collection === activeResourceCollection) &&
+    (activeResourceSubject === 'all' || resource.subject === activeResourceSubject)
+  );
+  resourceGrid.innerHTML = visibleResources.length ? visibleResources.map(resource => `<article class="resource-card"><div class="resource-icon ${resource.color}">${resource.icon}</div><div><span class="resource-type">${resource.type.toUpperCase()} · ${resource.subject.toUpperCase()}</span><h3>${resource.title}</h3><p>Shared by ${resource.author}</p>${resource.link ? `<a class="resource-link" href="${resource.link}" target="_blank" rel="noopener">Open resource →</a>` : ''}</div><button aria-label="Save ${resource.title}">⌑</button></article>`).join('') : '<p class="empty-resources">No resources in this collection yet.</p>';
+}
+document.querySelectorAll('[data-resource-collection]').forEach(button => button.addEventListener('click', () => {
+  activeResourceCollection = button.dataset.resourceCollection;
+  document.querySelectorAll('.resource-tabs [data-resource-collection]').forEach(tab => tab.classList.toggle('active', tab.dataset.resourceCollection === activeResourceCollection));
+  renderResources();
+}));
+resourceSubjectFilter.addEventListener('change', () => {
+  activeResourceSubject = resourceSubjectFilter.value;
+  renderResources();
+});
+renderResources();
 const modal = document.querySelector('#modal');
 const modalEyebrow = document.querySelector('#modalEyebrow');
 const modalFields = document.querySelector('#modalFields');
@@ -148,7 +182,7 @@ function openModal(title, text, type = 'correction') {
   document.querySelector('#modalText').textContent = text;
   modalEyebrow.hidden = type === 'correction';
   modalFields.innerHTML = type === 'resource'
-    ? '<label>Title<input id="resourceTitle" type="text" placeholder="e.g., Unit 3 study guide" required></label><label>Category<select id="resourceCategory" required><option value="notes">Notes</option><option value="practice">Practice</option><option value="study guide">Study guide</option><option value="other">Other</option></select></label><label>Link<input id="resourceLink" type="url" placeholder="https://" required></label><label>Description<textarea id="resourceDescription" placeholder="What is this material good for?" required></textarea></label>'
+    ? '<label>Title<input id="resourceTitle" type="text" placeholder="e.g., Unit 3 study guide" required></label><label>Category<select id="resourceCategory" required><option value="notes">Notes</option><option value="practice">Practice</option><option value="study guide">Study guide</option><option value="other">Other</option></select></label><label>Collection<select id="resourceCollection" required><option value="AP">AP</option><option value="IB">IB</option><option value="SAT">SAT</option><option value="ACT">ACT</option><option value="elective">Elective</option><option value="other">Other</option></select></label><label>Link<input id="resourceLink" type="url" placeholder="https://" required></label><label>Description<textarea id="resourceDescription" placeholder="What is this material good for?" required></textarea></label>'
     : type === 'discussion'
     ? '<label>Title of post<input id="discussionTitle" type="text" placeholder="What do you want to discuss?" required></label><label>Description of post<textarea id="discussionDescription" placeholder="Add context or a question for your classmates." required></textarea></label>'
     : '<textarea placeholder="Describe the issue or update…"></textarea>';
@@ -168,17 +202,15 @@ document.querySelector('#submitModal').addEventListener('click', ()=> {
   if (modalType === 'resource') {
     const title = document.querySelector('#resourceTitle').value.trim();
     const category = document.querySelector('#resourceCategory').value;
+    const collection = document.querySelector('#resourceCollection').value;
     const link = document.querySelector('#resourceLink').value.trim();
     const description = document.querySelector('#resourceDescription').value.trim();
     if (!title || !link || !description) return toast('Please complete all three resource fields.');
-    const resource = document.createElement('article');
-    resource.className = 'resource-card';
-    resource.innerHTML = '<div class="resource-icon green-paper">↗</div><div><span class="resource-type"></span><h3></h3><p></p><a class="resource-link" target="_blank" rel="noopener">Open resource →</a></div><button>⌑</button>';
-    resource.querySelector('.resource-type').textContent = category.toUpperCase();
-    resource.querySelector('h3').textContent = title;
-    resource.querySelector('p').textContent = description;
-    resource.querySelector('.resource-link').href = link;
-    document.querySelector('.resource-grid').prepend(resource);
+    resources.unshift({ title, type: category, subject: collection, collection, author: studentName, icon: '↗', color: 'green-paper', link, description });
+    activeResourceCollection = collection;
+    activeResourceSubject = 'all';
+    document.querySelectorAll('.resource-tabs [data-resource-collection]').forEach(tab => tab.classList.toggle('active', tab.dataset.resourceCollection === collection));
+    renderResources();
     modal.classList.remove('open');
     return toast('Resource shared with your study group.');
   }
