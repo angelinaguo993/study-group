@@ -12,4 +12,30 @@ body{font-size:16px}.subtitle{font-size:16px}.soft-button,.primary-button,.dark-
 
 .empty-homework{color:#788379;font-size:16px;font-family:'DM Sans',sans-serif;margin:0}
 
+.auth-backdrop{position:fixed;inset:0;background:#f1f5ef;display:grid;place-items:center;z-index:20}
+.auth-backdrop.hidden{display:none}
+.auth-card{width:min(380px,calc(100% - 32px));background:#fff;border:1px solid #e1e8e0;border-radius:12px;padding:28px}
+.auth-card h2{font-size:23px;margin:6px 0}
+.auth-card label{display:block;font-size:13px;font-weight:600;color:#536056;margin-top:12px}
+.auth-card input{display:block;width:100%;border:1px solid #dbe3da;border-radius:7px;padding:10px;margin-top:6px;font:14px 'DM Sans'}
+.auth-error{color:#c0504d;font-size:12px;margin:10px 0 0}
+.auth-toggle{font-size:12px;color:#788379;margin-top:16px;text-align:center}
+.auth-toggle button{border:0;background:none;color:#456859;font-weight:700;cursor:pointer;font-size:12px;text-decoration:underline;padding:0}
+#authSubmit{margin-top:18px}
+
+.manage-card{margin-bottom:20px}
+.manage-form label{display:block;font-size:13px;font-weight:600;color:#536056;margin-top:10px}
+.manage-form input,.manage-form select,.manage-form textarea{display:block;width:100%;border:1px solid #dbe3da;border-radius:7px;padding:9px 10px;margin-top:5px;font:14px 'DM Sans'}
+.manage-form textarea{min-height:80px;resize:vertical}
+.manage-form.inline-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.manage-form.inline-form input,.manage-form.inline-form select{width:auto;flex:1;margin-top:0;min-width:120px}
+.manage-form .primary-button{margin-top:14px}
+.manage-form.inline-form .primary-button{margin-top:0}
+.correction-row{border-top:1px solid #edf0ec;padding:12px 0;font-size:13px}
+.correction-row p{margin:4px 0;color:#536056}
+.correction-actions{display:flex;gap:8px;margin-top:8px}
+.correction-actions button{border:0;border-radius:5px;padding:6px 12px;font:600 11px 'DM Sans';cursor:pointer}
+.correction-actions .approve{background:#527664;color:#fff}
+.correction-actions .reject{background:#e8e0e0;color:#8a4a4a}
+
 @media(max-width:600px){.calendar-controls{text-align:left}.discussion-feed{max-height:440px}}

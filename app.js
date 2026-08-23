@@ -1,13 +1,16 @@
-const assignments = [
-  { course: 'AP Calculus AB', title: 'Problem Set 3.4: Derivatives', teacher: 'Ms. Sharma', due: 'Tomorrow, 8:00 AM', subject: 'math', description: 'Finish problems 1–24. Show your work for free-response questions.', thisWeek: true },
-  { course: 'English 10', title: 'Read chapters 9–11', teacher: 'Mr. Rios', due: 'Thu, Oct 17', subject: 'eng', description: 'Come prepared to discuss the turning point in the narrative.', thisWeek: true },
-  { course: 'Chemistry', title: 'Lab report: calorimetry', teacher: 'Dr. Lee', due: 'Fri, Oct 18', subject: 'chem', description: 'Complete analysis questions and submit your draft.', thisWeek: true },
-  { course: 'World History', title: 'Silk Roads source analysis', teacher: 'Ms. Khan', due: 'Mon, Oct 21', subject: 'history', description: 'Annotate the primary source and respond to prompts.', thisWeek: true },
-  { course: 'Spanish 3', title: 'Vocabulario: La ciudad', teacher: 'Sra. Morales', due: 'Tue, Oct 22', subject: 'spanish', description: 'Study the Unit 3 vocabulary set before the quiz.' },
-  { course: 'AP Calculus AB', title: 'Review for limits quiz', teacher: 'Ms. Sharma', due: 'Wed, Oct 23', subject: 'math', description: 'Use the review packet and try the optional challenge questions.' }
-];
-const scheduledClasses = new Set(['AP Calculus AB', 'Chemistry', 'English 10']);
-let activeHomeworkFilter = 'yours';
+// ============================================
+// Supabase setup
+// ============================================
+const SUPABASE_URL = 'https://irrciwbcscmnjjaqclbp.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlycmNpd2Jjc2NtbmpqYXFjbGJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MDIzNjQsImV4cCI6MjEwMzA3ODM2NH0.xfv9eTMse8wsyTwVOix9VfEcHeGs0pPKhahEKtNIr34';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;
+let currentProfile = null;
+let classes = [];
+let assignments = [];
+let corrections = [];
+
 const resources = [
   { title: 'Derivative rules at a glance', type: 'Study guide', subject: 'AP Calc', collection: 'AP', author: 'Maya Thompson', icon: '✦', color: 'green-paper' },
   { title: 'Calorimetry practice problems', type: 'Practice', subject: 'Chemistry', collection: 'IB', author: 'Jordan Lee', icon: '▤', color: 'purple-paper' },
@@ -18,72 +21,230 @@ const resources = [
 ];
 let activeResourceCollection = 'all';
 let activeResourceSubject = 'all';
+let activeHomeworkFilter = 'yours';
 
-const studentName = document.querySelector('#profileButton b').textContent.split(' ')[0];
-const currentDate = new Intl.DateTimeFormat('en-US', {
-  weekday: 'long',
-  month: 'long',
-  day: 'numeric'
-}).format(new Date());
+const authScreen = document.querySelector('#authScreen');
+const shell = document.querySelector('.shell');
+let authMode = 'signin';
+
+function showAuthError(message) {
+  const el = document.querySelector('#authError');
+  el.textContent = message;
+  el.hidden = !message;
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  showAuthError('');
+  document.querySelector('#authHeading').textContent = mode === 'signin' ? 'Sign in' : 'Create your account';
+  document.querySelector('#authSubtitle').textContent = mode === 'signin' ? 'Welcome back — sign in to see your homework.' : 'Set up your StudyGroup account.';
+  document.querySelector('#authNameField').hidden = mode === 'signin';
+  document.querySelector('#authSubmit').textContent = mode === 'signin' ? 'Sign in' : 'Sign up';
+  document.querySelector('#authToggle').innerHTML = mode === 'signin'
+    ? `Don't have an account? <button type="button" id="authSwitch">Sign up</button>`
+    : `Already have an account? <button type="button" id="authSwitch">Sign in</button>`;
+  document.querySelector('#authSwitch').addEventListener('click', () => setAuthMode(mode === 'signin' ? 'signup' : 'signin'));
+}
+setAuthMode('signin');
+
+document.querySelector('#authSubmit').addEventListener('click', async () => {
+  const email = document.querySelector('#authEmail').value.trim();
+  const password = document.querySelector('#authPassword').value;
+  const name = document.querySelector('#authName').value.trim();
+  showAuthError('');
+  if (!email || !password) return showAuthError('Please enter an email and password.');
+  if (authMode === 'signup') {
+    if (!name) return showAuthError('Please enter your full name.');
+    const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
+    if (error) return showAuthError(error.message);
+    showAuthError('Account created! Check your email if confirmation is required, then sign in.');
+  } else {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return showAuthError(error.message);
+  }
+});
+
+document.querySelector('#signOutButton').addEventListener('click', async () => {
+  await supabase.auth.signOut();
+});
+
+supabase.auth.onAuthStateChange((_event, session) => {
+  if (session?.user) {
+    currentUser = session.user;
+    initializeApp();
+  } else {
+    currentUser = null;
+    currentProfile = null;
+    authScreen.classList.remove('hidden');
+    shell.style.display = 'none';
+  }
+});
+
+async function initializeApp() {
+  const { data: profile, error } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single();
+  if (error || !profile) {
+    showAuthError('Could not load your profile. Try refreshing.');
+    return;
+  }
+  currentProfile = profile;
+  authScreen.classList.add('hidden');
+  shell.style.display = '';
+
+  document.querySelector('#profileName').textContent = currentProfile.full_name;
+  document.querySelector('#profileRole').textContent = currentProfile.role === 'mod' ? 'Moderator' : 'Student';
+  document.querySelector('#profileAvatar').textContent = initialsOf(currentProfile.full_name);
+  document.querySelector('#studentName').textContent = currentProfile.full_name.split(' ')[0];
+  document.querySelector('#manageNavLink').hidden = currentProfile.role !== 'mod';
+
+  await loadClassesAndHomework();
+  renderHomework();
+  if (currentProfile.role === 'mod') {
+    renderManageClasses();
+    populateHomeworkClassSelect();
+    await loadCorrections();
+  }
+}
+
+function initialsOf(name) {
+  return name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase();
+}
+
 const dashboardAssignments = document.querySelector('#dashboardAssignments');
 const focusAssignment = document.querySelector('#focusAssignment');
-
-document.querySelector('#studentName').textContent = studentName;
-document.querySelector('#topbarDate').textContent = currentDate;
-document.querySelector('#dashboardDate').textContent = currentDate;
-function updateDashboardAssignments() {
-  const overviewAssignments = assignments.slice(1, 4).filter(assignment => !assignment.completed);
-  dashboardAssignments.innerHTML = overviewAssignments.map(assignment => {
-    const index = assignments.indexOf(assignment);
-    const initials = assignment.teacher.split(' ').map(part => part[0]).join('').slice(0, 2);
-    return `<article class="assignment-card" data-assignment="${index}"><div class="card-meta"><span class="course-tag ${assignmentTagColor(assignment.subject)}">${assignment.course}</span><span>Due ${assignment.due}</span></div><h3>${assignment.title}</h3><p>${assignment.description}</p><div class="card-bottom"><span class="teacher"><i class="mini-avatar">${initials}</i> ${assignment.teacher}</span><button class="circle-check dashboard-check" aria-label="Complete assignment">✓</button></div></article>`;
-  }).join('');
-  const focusComplete = assignments[0].completed;
-  focusAssignment.hidden = focusComplete;
-  const focusButton = document.querySelector('#completeFocus');
-  focusButton.classList.toggle('completed', focusComplete);
-  focusButton.innerHTML = focusComplete ? '<span>✓</span> Completed' : '<span>✓</span> Mark complete';
-  const remaining = overviewAssignments.length;
-  document.querySelector('#assignmentCount').textContent = `${remaining} assignment${remaining === 1 ? '' : 's'}`;
-}
-updateDashboardAssignments();
-
 const homeworkList = document.querySelector('#homeworkList');
 const courseFilter = document.querySelector('#courseFilter');
-const courseNames = [...new Set(assignments.map(a => a.course))];
-courseFilter.innerHTML = `<option>All classes</option>${courseNames.map(course => `<option>${course}</option>`).join('')}`;
+
+async function loadClassesAndHomework() {
+  const { data: classesData } = await supabase.from('classes').select('*').order('name');
+  classes = classesData || [];
+
+  const { data: homeworkData } = await supabase.from('homework').select('*, classes(*)').order('due_date', { ascending: true, nullsFirst: false });
+  const { data: completionsData } = await supabase.from('completions').select('homework_id').eq('student_id', currentUser.id);
+  const completedSet = new Set((completionsData || []).map(c => c.homework_id));
+
+  assignments = (homeworkData || []).map(h => ({
+    id: h.id,
+    course: h.classes?.name || 'Unknown class',
+    subject: h.classes?.subject_code || 'other',
+    teacher: h.classes?.teacher || '',
+    title: h.title,
+    description: h.description || '',
+    dueDate: h.due_date ? new Date(h.due_date + 'T00:00:00') : null,
+    due: h.due_date ? new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(h.due_date + 'T00:00:00')) : 'No due date',
+    completed: completedSet.has(h.id)
+  }));
+
+  const courseNames = [...new Set(classes.map(c => c.name))];
+  courseFilter.innerHTML = `<option>All classes</option>${courseNames.map(course => `<option>${course}</option>`).join('')}`;
+}
 
 function assignmentTagColor(subject) { return subject === 'chem' ? 'purple' : ['history', 'spanish'].includes(subject) ? 'gold' : 'blue'; }
 function assignmentIcon(subject) { return subject === 'math' ? '∑' : subject === 'chem' ? '⚗' : subject === 'eng' ? 'A' : '◆'; }
+
+function sortedIncomplete() {
+  return assignments.filter(a => !a.completed).sort((a, b) => (a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity));
+}
+
+function updateDashboardAssignments() {
+  const upcoming = sortedIncomplete();
+  const focus = upcoming[0];
+  const overviewAssignments = upcoming.slice(1, 4);
+
+  focusAssignment.hidden = !focus;
+  if (focus) {
+    document.querySelector('#focusDue').textContent = `Due ${focus.due}`;
+    document.querySelector('#focusDot').className = `subject-dot ${focus.subject}`;
+    document.querySelector('#focusDot').textContent = assignmentIcon(focus.subject);
+    document.querySelector('#focusTitle').textContent = focus.title;
+    document.querySelector('#focusMeta').innerHTML = `${focus.course} <span>·</span> ${focus.teacher}`;
+    document.querySelector('#focusFooter').textContent = `Posted by ${focus.teacher || 'your teacher'}`;
+    const focusButton = document.querySelector('#completeFocus');
+    focusButton.dataset.id = focus.id;
+    focusButton.classList.remove('completed');
+    focusButton.innerHTML = '<span>✓</span> Mark complete';
+  }
+
+  dashboardAssignments.innerHTML = overviewAssignments.map(a => {
+    const initials = (a.teacher || '').split(' ').map(part => part[0]).join('').slice(0, 2);
+    return `<article class="assignment-card" data-id="${a.id}"><div class="card-meta"><span class="course-tag ${assignmentTagColor(a.subject)}">${a.course}</span><span>Due ${a.due}</span></div><h3>${a.title}</h3><p>${a.description}</p><div class="card-bottom"><span class="teacher"><i class="mini-avatar">${initials}</i> ${a.teacher}</span><button class="circle-check dashboard-check" aria-label="Complete assignment">✓</button></div></article>`;
+  }).join('');
+
+  const remaining = upcoming.length;
+  document.querySelector('#assignmentCount').textContent = `${remaining} assignment${remaining === 1 ? '' : 's'}`;
+}
+
 function matchingAssignments() {
   const course = courseFilter.value;
+  const now = new Date();
+  const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   return assignments.filter(a => {
     const matchesTab = activeHomeworkFilter === 'all' ||
-      (activeHomeworkFilter === 'yours' && scheduledClasses.has(a.course) && !a.completed) ||
-      (activeHomeworkFilter === 'week' && a.thisWeek) ||
+      (activeHomeworkFilter === 'yours' && !a.completed) ||
+      (activeHomeworkFilter === 'week' && a.dueDate && a.dueDate >= now && a.dueDate <= weekFromNow) ||
       (activeHomeworkFilter === 'completed' && a.completed);
     return matchesTab && (course === 'All classes' || a.course === course);
   });
 }
+
 function updateFilterCounts() {
+  const now = new Date();
+  const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   const counts = {
-    yours: assignments.filter(a => scheduledClasses.has(a.course) && !a.completed).length,
-    week: assignments.filter(a => a.thisWeek).length,
+    yours: assignments.filter(a => !a.completed).length,
+    week: assignments.filter(a => a.dueDate && a.dueDate >= now && a.dueDate <= weekFromNow).length,
     completed: assignments.filter(a => a.completed).length,
     all: assignments.length
   };
   document.querySelectorAll('.filter').forEach(button => { button.querySelector('b').textContent = counts[button.dataset.filter]; });
 }
+
 function renderHomework() {
   const visibleAssignments = matchingAssignments();
   homeworkList.innerHTML = visibleAssignments.length ? visibleAssignments.map(a => {
-    const index = assignments.indexOf(a);
-    return `<article class="homework-row ${a.completed ? 'is-complete' : ''}"><span class="subject-dot ${a.subject}">${assignmentIcon(a.subject)}</span><div class="homework-main"><span class="course-tag ${assignmentTagColor(a.subject)}">${a.course}</span><h3>${a.title}</h3><p>${a.description}</p><small>${a.teacher} · Posted yesterday</small></div><div class="homework-due"><b>${a.due}</b><small>Due date</small></div><button class="circle-check homework-check ${a.completed ? 'done' : ''}" data-assignment="${index}" aria-label="${a.completed ? 'Mark incomplete' : 'Mark complete'}">✓</button></article>`;
+    return `<article class="homework-row ${a.completed ? 'is-complete' : ''}"><span class="subject-dot ${a.subject}">${assignmentIcon(a.subject)}</span><div class="homework-main"><span class="course-tag ${assignmentTagColor(a.subject)}">${a.course}</span><h3>${a.title}</h3><p>${a.description}</p><small>${a.teacher}</small></div><div class="homework-due"><b>${a.due}</b><small>Due date</small></div><button class="circle-check homework-check ${a.completed ? 'done' : ''}" data-id="${a.id}" aria-label="${a.completed ? 'Mark incomplete' : 'Mark complete'}">✓</button></article>`;
   }).join('') : '<p class="empty-homework">No assignments found for this view.</p>';
   updateFilterCounts();
   updateDashboardAssignments();
 }
-renderHomework();
+
+async function toggleCompletion(assignment) {
+  if (!assignment.completed) {
+    await supabase.from('completions').insert({ student_id: currentUser.id, homework_id: assignment.id });
+    assignment.completed = true;
+  } else {
+    await supabase.from('completions').delete().eq('student_id', currentUser.id).eq('homework_id', assignment.id);
+    assignment.completed = false;
+  }
+  renderHomework();
+  toast(assignment.completed ? 'Marked as completed.' : 'Marked as incomplete.');
+}
+
+homeworkList.addEventListener('click', event => {
+  const button = event.target.closest('.homework-check');
+  if (!button) return;
+  const assignment = assignments.find(a => a.id === button.dataset.id);
+  if (assignment) toggleCompletion(assignment);
+});
+
+document.querySelector('#completeFocus').addEventListener('click', e => {
+  const assignment = assignments.find(a => a.id === e.currentTarget.dataset.id);
+  if (assignment) toggleCompletion(assignment);
+});
+
+dashboardAssignments.addEventListener('click', event => {
+  const button = event.target.closest('.dashboard-check');
+  if (!button) return;
+  const card = button.closest('.assignment-card');
+  const assignment = assignments.find(a => a.id === card.dataset.id);
+  if (assignment) toggleCompletion(assignment);
+});
+
+document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
+  activeHomeworkFilter = button.dataset.filter;
+  document.querySelectorAll('.filter').forEach(item => item.classList.toggle('active', item === button));
+  renderHomework();
+}));
+courseFilter.addEventListener('change', renderHomework);
 
 const events = {
   8: { 15: ['Picture Day', 'event-bg'] },
@@ -115,39 +276,12 @@ document.querySelector('#previousMonth').addEventListener('click', () => { displ
 document.querySelector('#nextMonth').addEventListener('click', () => { displayedMonth = (displayedMonth + 1) % 12; renderCalendar(); });
 document.querySelector('#todayButton').addEventListener('click', () => { displayedMonth = currentMonthIndex; renderCalendar(); });
 
+const currentDate = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
+document.querySelector('#topbarDate').textContent = currentDate;
+document.querySelector('#dashboardDate').textContent = currentDate;
+
 document.querySelectorAll('[data-view]').forEach(link => link.addEventListener('click', e => { e.preventDefault(); const view = link.dataset.view; document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view')); document.querySelector('#' + view).classList.add('active-view'); document.querySelectorAll('.nav-link').forEach(n => n.classList.toggle('active', n.dataset.view === view)); document.querySelector('#crumb').innerHTML = `${view === 'dashboard' ? 'Dashboard' : view[0].toUpperCase() + view.slice(1)} <span>/</span> ${view === 'dashboard' ? currentDate : 'Interlake High School'}`; window.scrollTo(0,0); }));
 function toast(message) { const t = document.querySelector('#toast'); t.textContent = message; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2600); }
-homeworkList.addEventListener('click', event => {
-  const button = event.target.closest('.homework-check');
-  if (!button) return;
-  const assignment = assignments[Number(button.dataset.assignment)];
-  assignment.completed = !assignment.completed;
-  renderHomework();
-  toast(assignment.completed ? 'Marked as completed.' : 'Marked as incomplete.');
-});
-document.querySelector('#completeFocus').addEventListener('click', e => {
-  const assignment = assignments[0];
-  assignment.completed = !assignment.completed;
-  e.currentTarget.classList.toggle('completed', assignment.completed);
-  e.currentTarget.innerHTML = assignment.completed ? '<span>✓</span> Completed' : '<span>✓</span> Mark complete';
-  renderHomework();
-  toast(assignment.completed ? 'Marked as completed.' : 'Marked as incomplete.');
-});
-dashboardAssignments.addEventListener('click', event => {
-  const button = event.target.closest('.dashboard-check');
-  if (!button) return;
-  const card = button.closest('.assignment-card');
-  const assignment = assignments[Number(card.dataset.assignment)];
-  assignment.completed = true;
-  renderHomework();
-  toast('Marked as completed.');
-});
-document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
-  activeHomeworkFilter = button.dataset.filter;
-  document.querySelectorAll('.filter').forEach(item => item.classList.toggle('active', item === button));
-  renderHomework();
-}));
-courseFilter.addEventListener('change', renderHomework);
 
 const resourceGrid = document.querySelector('#resourceGrid');
 const resourceSubjectFilter = document.querySelector('#resourceSubjectFilter');
@@ -172,6 +306,7 @@ resourceSubjectFilter.addEventListener('change', () => {
   renderResources();
 });
 renderResources();
+
 const modal = document.querySelector('#modal');
 const modalEyebrow = document.querySelector('#modalEyebrow');
 const modalFields = document.querySelector('#modalFields');
@@ -181,11 +316,14 @@ function openModal(title, text, type = 'correction') {
   document.querySelector('#modalTitle').textContent = title;
   document.querySelector('#modalText').textContent = text;
   modalEyebrow.hidden = type === 'correction';
-  modalFields.innerHTML = type === 'resource'
-    ? '<label>Title<input id="resourceTitle" type="text" placeholder="e.g., Unit 3 study guide" required></label><label>Category<select id="resourceCategory" required><option value="notes">Notes</option><option value="practice">Practice</option><option value="study guide">Study guide</option><option value="other">Other</option></select></label><label>Collection<select id="resourceCollection" required><option value="AP">AP</option><option value="IB">IB</option><option value="SAT">SAT</option><option value="ACT">ACT</option><option value="elective">Elective</option><option value="other">Other</option></select></label><label>Link<input id="resourceLink" type="url" placeholder="https://" required></label><label>Description<textarea id="resourceDescription" placeholder="What is this material good for?" required></textarea></label>'
-    : type === 'discussion'
-    ? '<label>Title of post<input id="discussionTitle" type="text" placeholder="What do you want to discuss?" required></label><label>Description of post<textarea id="discussionDescription" placeholder="Add context or a question for your classmates." required></textarea></label>'
-    : '<textarea placeholder="Describe the issue or update…"></textarea>';
+  if (type === 'resource') {
+    modalFields.innerHTML = '<label>Title<input id="resourceTitle" type="text" placeholder="e.g., Unit 3 study guide" required></label><label>Category<select id="resourceCategory" required><option value="notes">Notes</option><option value="practice">Practice</option><option value="study guide">Study guide</option><option value="other">Other</option></select></label><label>Collection<select id="resourceCollection" required><option value="AP">AP</option><option value="IB">IB</option><option value="SAT">SAT</option><option value="ACT">ACT</option><option value="elective">Elective</option><option value="other">Other</option></select></label><label>Link<input id="resourceLink" type="url" placeholder="https://" required></label><label>Description<textarea id="resourceDescription" placeholder="What is this material good for?" required></textarea></label>';
+  } else if (type === 'discussion') {
+    modalFields.innerHTML = '<label>Title of post<input id="discussionTitle" type="text" placeholder="What do you want to discuss?" required></label><label>Description of post<textarea id="discussionDescription" placeholder="Add context or a question for your classmates." required></textarea></label>';
+  } else {
+    const options = assignments.map(a => `<option value="${a.id}">${a.course} — ${a.title}</option>`).join('');
+    modalFields.innerHTML = `<label>Which assignment?<select id="correctionHomework">${options || '<option value="">No homework posted yet</option>'}</select></label><label>What needs to change?<textarea id="correctionText" placeholder="Describe the issue or update…"></textarea></label>`;
+  }
   document.querySelector('#submitModal').textContent = type === 'resource' ? 'Share resource' : type === 'discussion' ? 'Create post' : 'Send request';
   modal.classList.add('open');
 }
@@ -198,7 +336,7 @@ addDiscussion.setAttribute('aria-label', 'Create discussion post');
 addDiscussion.addEventListener('click', ()=>openModal('Create a discussion post', 'Share a question, idea, or study tip with your classmates.', 'discussion'));
 document.querySelector('#closeModal').addEventListener('click', ()=>modal.classList.remove('open'));
 modal.addEventListener('click', e=> { if(e.target === modal) modal.classList.remove('open'); });
-document.querySelector('#submitModal').addEventListener('click', ()=> {
+document.querySelector('#submitModal').addEventListener('click', async () => {
   if (modalType === 'resource') {
     const title = document.querySelector('#resourceTitle').value.trim();
     const category = document.querySelector('#resourceCategory').value;
@@ -206,7 +344,7 @@ document.querySelector('#submitModal').addEventListener('click', ()=> {
     const link = document.querySelector('#resourceLink').value.trim();
     const description = document.querySelector('#resourceDescription').value.trim();
     if (!title || !link || !description) return toast('Please complete all three resource fields.');
-    resources.unshift({ title, type: category, subject: collection, collection, author: studentName, icon: '↗', color: 'green-paper', link, description });
+    resources.unshift({ title, type: category, subject: collection, collection, author: currentProfile.full_name, icon: '↗', color: 'green-paper', link, description });
     activeResourceCollection = collection;
     activeResourceSubject = 'all';
     document.querySelectorAll('.resource-tabs [data-resource-collection]').forEach(tab => tab.classList.toggle('active', tab.dataset.resourceCollection === collection));
@@ -220,7 +358,7 @@ document.querySelector('#submitModal').addEventListener('click', ()=> {
     if (!title || !description) return toast('Please add a title and description.');
     const post = document.createElement('article');
     post.className = 'community-post';
-    post.innerHTML = '<div class="post-head"><i class="mini-avatar green">AG</i><div><b>Alex Green</b><p>Just now</p></div></div><h3 class="discussion-title"></h3><p class="discussion-description"></p><div class="post-actions"><button class="heart-button" aria-label="Like post">♡ <span>0</span></button><button class="replies-toggle" aria-expanded="false">◌ <span>0 replies</span></button></div><div class="replies" hidden></div>';
+    post.innerHTML = `<div class="post-head"><i class="mini-avatar green">${initialsOf(currentProfile.full_name)}</i><div><b>${currentProfile.full_name}</b><p>Just now</p></div></div><h3 class="discussion-title"></h3><p class="discussion-description"></p><div class="post-actions"><button class="heart-button" aria-label="Like post">♡ <span>0</span></button><button class="replies-toggle" aria-expanded="false">◌ <span>0 replies</span></button></div><div class="replies" hidden></div>`;
     post.querySelector('.discussion-title').textContent = title;
     post.querySelector('.discussion-description').textContent = description;
     setupDiscussionPost(post);
@@ -228,12 +366,18 @@ document.querySelector('#submitModal').addEventListener('click', ()=> {
     modal.classList.remove('open');
     return toast('Discussion post created.');
   }
+  const homeworkId = document.querySelector('#correctionHomework')?.value;
+  const suggestedChange = document.querySelector('#correctionText').value.trim();
+  if (!homeworkId || !suggestedChange) return toast('Please pick an assignment and describe the change.');
+  const { error } = await supabase.from('corrections').insert({ homework_id: homeworkId, submitted_by: currentUser.id, suggested_change: suggestedChange });
   modal.classList.remove('open');
-  toast('Sent to the StudyGroup team.');
+  if (error) return toast('Could not send your request. Try again.');
+  toast('Sent to the StudyGroup moderators.');
 });
 document.querySelector('#editSchedule').addEventListener('click', ()=>document.querySelector('[data-view="settings"]').click());
 document.querySelector('#searchButton').addEventListener('click', ()=>toast('Search is coming soon. Try browsing your classes.'));
-document.querySelector('#profileButton').addEventListener('click', ()=>toast('Signed in as Alex Green · Student'));
+document.querySelector('#profileButton').addEventListener('click', ()=>toast(`Signed in as ${currentProfile.full_name} · ${currentProfile.role === 'mod' ? 'Moderator' : 'Student'}`));
+
 function setupDiscussionPost(post) {
   post.querySelector('.post-actions button')?.classList.add('heart-button');
   post.querySelectorAll('.replies p').forEach(reply => {
@@ -277,7 +421,7 @@ document.querySelector('.discussion-feed').addEventListener('submit', event => {
   const replyText = input.value.trim();
   if (!replyText) return;
   const reply = document.createElement('p');
-  reply.innerHTML = '<b>Alex Green</b> · ';
+  reply.innerHTML = `<b>${currentProfile.full_name}</b> · `;
   reply.append(replyText);
   const heart = document.createElement('button');
   heart.className = 'heart-button reply-heart';
@@ -290,4 +434,82 @@ document.querySelector('.discussion-feed').addEventListener('submit', event => {
   const count = Number(toggle.textContent.match(/\d+/)?.[0] || 0) + 1;
   toggle.textContent = `${count} ${count === 1 ? 'reply' : 'replies'}`;
   toast('Reply posted.');
+});
+
+function renderManageClasses() {
+  const list = document.querySelector('#manageClassList');
+  list.innerHTML = classes.length ? classes.map(c => `<div class="class-setting"><span class="subject-dot ${c.subject_code}">${assignmentIcon(c.subject_code)}</span><div><b>${c.name}</b><p>${c.teacher}</p></div><button class="delete-class" data-id="${c.id}">Remove</button></div>`).join('') : '<p class="empty-homework">No classes yet — add one below.</p>';
+}
+
+document.querySelector('#addClassButton').addEventListener('click', async () => {
+  const name = document.querySelector('#newClassName').value.trim();
+  const teacher = document.querySelector('#newClassTeacher').value.trim();
+  const subject_code = document.querySelector('#newClassSubject').value;
+  if (!name || !teacher) return toast('Please enter a class name and teacher.');
+  const { error } = await supabase.from('classes').insert({ name, teacher, subject_code, created_by: currentUser.id });
+  if (error) return toast('Could not add class: ' + error.message);
+  document.querySelector('#newClassName').value = '';
+  document.querySelector('#newClassTeacher').value = '';
+  await loadClassesAndHomework();
+  renderManageClasses();
+  populateHomeworkClassSelect();
+  renderHomework();
+  toast('Class added.');
+});
+
+document.querySelector('#manageClassList').addEventListener('click', async event => {
+  const button = event.target.closest('.delete-class');
+  if (!button) return;
+  const { error } = await supabase.from('classes').delete().eq('id', button.dataset.id);
+  if (error) return toast('Could not remove class — it may still have homework attached.');
+  await loadClassesAndHomework();
+  renderManageClasses();
+  populateHomeworkClassSelect();
+  renderHomework();
+  toast('Class removed.');
+});
+
+function populateHomeworkClassSelect() {
+  const select = document.querySelector('#homeworkClassSelect');
+  select.innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('') || '<option value="">Add a class first</option>';
+}
+
+document.querySelector('#postHomeworkButton').addEventListener('click', async () => {
+  const class_id = document.querySelector('#homeworkClassSelect').value;
+  const title = document.querySelector('#homeworkTitleInput').value.trim();
+  const description = document.querySelector('#homeworkDescInput').value.trim();
+  const due_date = document.querySelector('#homeworkDueInput').value || null;
+  if (!class_id || !title) return toast('Please choose a class and enter a title.');
+  const { error } = await supabase.from('homework').insert({ class_id, title, description, due_date, created_by: currentUser.id });
+  if (error) return toast('Could not post homework: ' + error.message);
+  document.querySelector('#homeworkTitleInput').value = '';
+  document.querySelector('#homeworkDescInput').value = '';
+  document.querySelector('#homeworkDueInput').value = '';
+  await loadClassesAndHomework();
+  renderHomework();
+  toast('Homework posted.');
+});
+
+async function loadCorrections() {
+  const { data, error } = await supabase
+    .from('corrections')
+    .select('*, homework(title), profiles!corrections_submitted_by_fkey(full_name)')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+  corrections = error ? [] : (data || []);
+  renderCorrections();
+}
+
+function renderCorrections() {
+  const container = document.querySelector('#correctionsQueue');
+  container.innerHTML = corrections.length ? corrections.map(c => `<div class="correction-row"><p><b>${c.profiles?.full_name || 'A student'}</b> on <i>${c.homework?.title || 'a deleted assignment'}</i></p><p>${c.suggested_change}</p><div class="correction-actions"><button class="approve" data-id="${c.id}" data-status="approved">Approve</button><button class="reject" data-id="${c.id}" data-status="rejected">Reject</button></div></div>`).join('') : '<p class="empty-homework">No pending corrections.</p>';
+}
+
+document.querySelector('#correctionsQueue').addEventListener('click', async event => {
+  const button = event.target.closest('button[data-status]');
+  if (!button) return;
+  const { error } = await supabase.from('corrections').update({ status: button.dataset.status, reviewed_by: currentUser.id }).eq('id', button.dataset.id);
+  if (error) return toast('Could not update that request.');
+  await loadCorrections();
+  toast(button.dataset.status === 'approved' ? 'Correction approved.' : 'Correction rejected.');
 });
