@@ -38,4 +38,11 @@ body{font-size:16px}.subtitle{font-size:16px}.soft-button,.primary-button,.dark-
 .correction-actions .approve{background:#527664;color:#fff}
 .correction-actions .reject{background:#e8e0e0;color:#8a4a4a}
 
+.mod-delete{border:0;background:none;color:#a35a5a;cursor:pointer;font-size:13px;padding:2px 4px}
+.mod-delete:hover{color:#c0504d}
+.resource-card{position:relative}
+.resource-card .mod-delete{position:absolute;top:8px;right:8px}
+.post-actions .mod-delete{font-size:11px}
+.reply-delete{font-size:10px!important;margin-left:4px}
+
 @media(max-width:600px){.calendar-controls{text-align:left}.discussion-feed{max-height:440px}}

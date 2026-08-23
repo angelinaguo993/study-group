@@ -10,6 +10,7 @@ let currentProfile = null;
 let classes = [];
 let assignments = [];
 let corrections = [];
+let enrolledClassIds = new Set();
 
 const resources = [
   { title: 'Derivative rules at a glance', type: 'Study guide', subject: 'AP Calc', collection: 'AP', author: 'Maya Thompson', icon: '✦', color: 'green-paper' },
@@ -96,8 +97,12 @@ async function initializeApp() {
   document.querySelector('#studentName').textContent = currentProfile.full_name.split(' ')[0];
   document.querySelector('#manageNavLink').hidden = currentProfile.role !== 'mod';
 
+  await loadEnrollments();
   await loadClassesAndHomework();
   renderHomework();
+  renderSchedule();
+  renderResources();
+  applyModDiscussionControls();
   if (currentProfile.role === 'mod') {
     renderManageClasses();
     populateHomeworkClassSelect();
@@ -114,24 +119,32 @@ const focusAssignment = document.querySelector('#focusAssignment');
 const homeworkList = document.querySelector('#homeworkList');
 const courseFilter = document.querySelector('#courseFilter');
 
+async function loadEnrollments() {
+  const { data } = await db.from('enrollments').select('class_id').eq('student_id', currentUser.id);
+  enrolledClassIds = new Set((data || []).map(row => row.class_id));
+}
+
 async function loadClassesAndHomework() {
   const { data: classesData } = await db.from('classes').select('*').order('name');
   classes = classesData || [];
 
-  const { data: homeworkData } = await db.from('homework').select('*, classes(*)').order('due_date', { ascending: true, nullsFirst: false });
+  const { data: homeworkData } = await db.from('homework').select('*, classes(*), profiles!homework_created_by_fkey(full_name)').order('due_date', { ascending: true, nullsFirst: false });
   const { data: completionsData } = await db.from('completions').select('homework_id').eq('student_id', currentUser.id);
   const completedSet = new Set((completionsData || []).map(c => c.homework_id));
 
   assignments = (homeworkData || []).map(h => ({
     id: h.id,
+    classId: h.class_id,
     course: h.classes?.name || 'Unknown class',
     subject: h.classes?.subject_code || 'other',
     teacher: h.classes?.teacher || '',
+    postedBy: h.profiles?.full_name || 'a moderator',
     title: h.title,
     description: h.description || '',
     dueDate: h.due_date ? new Date(h.due_date + 'T00:00:00') : null,
     due: h.due_date ? new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(h.due_date + 'T00:00:00')) : 'No due date',
-    completed: completedSet.has(h.id)
+    completed: completedSet.has(h.id),
+    enrolled: enrolledClassIds.has(h.class_id)
   }));
 
   const courseNames = [...new Set(classes.map(c => c.name))];
@@ -142,7 +155,7 @@ function assignmentTagColor(subject) { return subject === 'chem' ? 'purple' : ['
 function assignmentIcon(subject) { return subject === 'math' ? '∑' : subject === 'chem' ? '⚗' : subject === 'eng' ? 'A' : '◆'; }
 
 function sortedIncomplete() {
-  return assignments.filter(a => !a.completed).sort((a, b) => (a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity));
+  return assignments.filter(a => !a.completed && a.enrolled).sort((a, b) => (a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity));
 }
 
 function updateDashboardAssignments() {
@@ -157,7 +170,7 @@ function updateDashboardAssignments() {
     document.querySelector('#focusDot').textContent = assignmentIcon(focus.subject);
     document.querySelector('#focusTitle').textContent = focus.title;
     document.querySelector('#focusMeta').innerHTML = `${focus.course} <span>·</span> ${focus.teacher}`;
-    document.querySelector('#focusFooter').textContent = `Posted by ${focus.teacher || 'your teacher'}`;
+    document.querySelector('#focusFooter').textContent = `Posted by ${focus.postedBy}`;
     const focusButton = document.querySelector('#completeFocus');
     focusButton.dataset.id = focus.id;
     focusButton.classList.remove('completed');
@@ -179,7 +192,7 @@ function matchingAssignments() {
   const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   return assignments.filter(a => {
     const matchesTab = activeHomeworkFilter === 'all' ||
-      (activeHomeworkFilter === 'yours' && !a.completed) ||
+      (activeHomeworkFilter === 'yours' && !a.completed && a.enrolled) ||
       (activeHomeworkFilter === 'week' && a.dueDate && a.dueDate >= now && a.dueDate <= weekFromNow) ||
       (activeHomeworkFilter === 'completed' && a.completed);
     return matchesTab && (course === 'All classes' || a.course === course);
@@ -190,7 +203,7 @@ function updateFilterCounts() {
   const now = new Date();
   const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   const counts = {
-    yours: assignments.filter(a => !a.completed).length,
+    yours: assignments.filter(a => !a.completed && a.enrolled).length,
     week: assignments.filter(a => a.dueDate && a.dueDate >= now && a.dueDate <= weekFromNow).length,
     completed: assignments.filter(a => a.completed).length,
     all: assignments.length
@@ -280,7 +293,7 @@ const currentDate = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: '
 document.querySelector('#topbarDate').textContent = currentDate;
 document.querySelector('#dashboardDate').textContent = currentDate;
 
-document.querySelectorAll('[data-view]').forEach(link => link.addEventListener('click', e => { e.preventDefault(); const view = link.dataset.view; document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view')); document.querySelector('#' + view).classList.add('active-view'); document.querySelectorAll('.nav-link').forEach(n => n.classList.toggle('active', n.dataset.view === view)); document.querySelector('#crumb').innerHTML = `${view === 'dashboard' ? 'Dashboard' : view[0].toUpperCase() + view.slice(1)} <span>/</span> ${view === 'dashboard' ? currentDate : 'Interlake High School'}`; window.scrollTo(0,0); }));
+document.querySelectorAll('[data-view]').forEach(link => link.addEventListener('click', e => { e.preventDefault(); const view = link.dataset.view; document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view')); document.querySelector('#' + view).classList.add('active-view'); document.querySelectorAll('.nav-link').forEach(n => n.classList.toggle('active', n.dataset.view === view)); document.querySelector('#crumb').innerHTML = `${view === 'dashboard' ? 'Dashboard' : view[0].toUpperCase() + view.slice(1)} <span>/</span> ${view === 'dashboard' ? currentDate : 'Interlake High School'}`; window.scrollTo(0,0); if (view === 'manage' && currentProfile?.role === 'mod') loadCorrections(); }));
 function toast(message) { const t = document.querySelector('#toast'); t.textContent = message; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2600); }
 
 const resourceGrid = document.querySelector('#resourceGrid');
@@ -294,8 +307,17 @@ function renderResources() {
     (activeResourceCollection === 'all' || resource.collection === activeResourceCollection) &&
     (activeResourceSubject === 'all' || resource.subject === activeResourceSubject)
   );
-  resourceGrid.innerHTML = visibleResources.length ? visibleResources.map(resource => `<article class="resource-card"><div class="resource-icon ${resource.color}">${resource.icon}</div><div><span class="resource-type">${resource.type.toUpperCase()} · ${resource.subject.toUpperCase()}</span><h3>${resource.title}</h3><p>Shared by ${resource.author}</p>${resource.link ? `<a class="resource-link" href="${resource.link}" target="_blank" rel="noopener">Open resource →</a>` : ''}</div><button aria-label="Save ${resource.title}">⌑</button></article>`).join('') : '<p class="empty-resources">No resources in this collection yet.</p>';
+  resourceGrid.innerHTML = visibleResources.length ? visibleResources.map(resource => `<article class="resource-card" data-index="${resources.indexOf(resource)}"><div class="resource-icon ${resource.color}">${resource.icon}</div><div><span class="resource-type">${resource.type.toUpperCase()} · ${resource.subject.toUpperCase()}</span><h3>${resource.title}</h3><p>Shared by ${resource.author}</p>${resource.link ? `<a class="resource-link" href="${resource.link}" target="_blank" rel="noopener">Open resource →</a>` : ''}</div><button aria-label="Save ${resource.title}">⌑</button>${currentProfile?.role === 'mod' ? `<button class="mod-delete" aria-label="Delete resource">🗑</button>` : ''}</article>`).join('') : '<p class="empty-resources">No resources in this collection yet.</p>';
 }
+resourceGrid.addEventListener('click', event => {
+  const button = event.target.closest('.mod-delete');
+  if (!button) return;
+  const card = button.closest('.resource-card');
+  const index = Number(card.dataset.index);
+  resources.splice(index, 1);
+  renderResources();
+  toast('Resource removed.');
+});
 document.querySelectorAll('[data-resource-collection]').forEach(button => button.addEventListener('click', () => {
   activeResourceCollection = button.dataset.resourceCollection;
   document.querySelectorAll('.resource-tabs [data-resource-collection]').forEach(tab => tab.classList.toggle('active', tab.dataset.resourceCollection === activeResourceCollection));
@@ -373,6 +395,7 @@ document.querySelector('#submitModal').addEventListener('click', async () => {
   modal.classList.remove('open');
   if (error) return toast('Could not send your request. Try again.');
   toast('Sent to the StudyGroup moderators.');
+  if (currentProfile.role === 'mod') await loadCorrections();
 });
 document.querySelector('#editSchedule').addEventListener('click', ()=>document.querySelector('[data-view="settings"]').click());
 document.querySelector('#searchButton').addEventListener('click', ()=>toast('Search is coming soon. Try browsing your classes.'));
@@ -395,9 +418,46 @@ function setupDiscussionPost(post) {
     composer.innerHTML = '<label>reply</label><div><input class="reply-input" type="text" placeholder="Write a reply…" aria-label="Write a reply"><button type="submit">Post</button></div>';
     replies.append(composer);
   }
+  applyModDiscussionControls(post);
+}
+function applyModDiscussionControls(scope) {
+  if (currentProfile?.role !== 'mod') return;
+  const posts = scope ? [scope] : document.querySelectorAll('.community-post');
+  posts.forEach(post => {
+    const actions = post.querySelector('.post-actions');
+    if (actions && !actions.querySelector('.mod-delete-post')) {
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'mod-delete mod-delete-post';
+      deleteButton.setAttribute('aria-label', 'Delete post');
+      deleteButton.textContent = '🗑 Delete post';
+      actions.append(deleteButton);
+    }
+    post.querySelectorAll('.replies p').forEach(reply => {
+      if (reply.querySelector('.reply-delete')) return;
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'mod-delete reply-delete';
+      deleteButton.setAttribute('aria-label', 'Delete reply');
+      deleteButton.textContent = '×';
+      reply.append(deleteButton);
+    });
+  });
 }
 document.querySelectorAll('.community-post').forEach(setupDiscussionPost);
 document.querySelector('.discussion-feed').addEventListener('click', event => {
+  const deletePost = event.target.closest('.mod-delete-post');
+  if (deletePost) {
+    deletePost.closest('.community-post').remove();
+    return toast('Post removed.');
+  }
+  const deleteReply = event.target.closest('.reply-delete');
+  if (deleteReply) {
+    const post = deleteReply.closest('.community-post');
+    deleteReply.closest('p').remove();
+    const toggle = post.querySelector('.replies-toggle span');
+    const count = Math.max(0, Number(toggle.textContent.match(/\d+/)?.[0] || 0) - 1);
+    toggle.textContent = `${count} ${count === 1 ? 'reply' : 'replies'}`;
+    return toast('Reply removed.');
+  }
   const heart = event.target.closest('.heart-button');
   if (heart) {
     const count = heart.querySelector('span');
@@ -433,6 +493,7 @@ document.querySelector('.discussion-feed').addEventListener('submit', event => {
   const toggle = composer.closest('.community-post').querySelector('.replies-toggle span');
   const count = Number(toggle.textContent.match(/\d+/)?.[0] || 0) + 1;
   toggle.textContent = `${count} ${count === 1 ? 'reply' : 'replies'}`;
+  applyModDiscussionControls(composer.closest('.community-post'));
   toast('Reply posted.');
 });
 
@@ -444,9 +505,8 @@ function renderManageClasses() {
 document.querySelector('#addClassButton').addEventListener('click', async () => {
   const name = document.querySelector('#newClassName').value.trim();
   const teacher = document.querySelector('#newClassTeacher').value.trim();
-  const subject_code = document.querySelector('#newClassSubject').value;
   if (!name || !teacher) return toast('Please enter a class name and teacher.');
-  const { error } = await db.from('classes').insert({ name, teacher, subject_code, created_by: currentUser.id });
+  const { error } = await db.from('classes').insert({ name, teacher, subject_code: 'other', created_by: currentUser.id });
   if (error) return toast('Could not add class: ' + error.message);
   document.querySelector('#newClassName').value = '';
   document.querySelector('#newClassTeacher').value = '';
@@ -490,8 +550,45 @@ document.querySelector('#postHomeworkButton').addEventListener('click', async ()
   toast('Homework posted.');
 });
 
+// ============================================
+// Your schedule (enrollments) — controls which classes count toward "Your assignments"
+// ============================================
+function renderSchedule() {
+  const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
+  const list = document.querySelector('#scheduleList');
+  list.innerHTML = enrolledClasses.length ? enrolledClasses.map(c => `<div class="class-setting"><span class="subject-dot ${c.subject_code}">${assignmentIcon(c.subject_code)}</span><div><b>${c.name}</b><p>${c.teacher}</p></div><button class="remove-schedule-class" data-id="${c.id}">Remove</button></div>`).join('') : '<p class="empty-homework">You haven\'t added any classes yet.</p>';
+
+  const notEnrolled = classes.filter(c => !enrolledClassIds.has(c.id));
+  const select = document.querySelector('#addScheduleClass');
+  select.innerHTML = notEnrolled.length ? notEnrolled.map(c => `<option value="${c.id}">${c.name}</option>`).join('') : '<option value="">No more classes to add</option>';
+}
+
+document.querySelector('#addScheduleButton').addEventListener('click', async () => {
+  const classId = document.querySelector('#addScheduleClass').value;
+  if (!classId) return toast('No class selected.');
+  const { error } = await db.from('enrollments').insert({ student_id: currentUser.id, class_id: classId });
+  if (error) return toast('Could not add that class.');
+  await loadEnrollments();
+  await loadClassesAndHomework();
+  renderSchedule();
+  renderHomework();
+  toast('Class added to your schedule.');
+});
+
+document.querySelector('#scheduleList').addEventListener('click', async event => {
+  const button = event.target.closest('.remove-schedule-class');
+  if (!button) return;
+  const { error } = await db.from('enrollments').delete().eq('student_id', currentUser.id).eq('class_id', button.dataset.id);
+  if (error) return toast('Could not remove that class.');
+  await loadEnrollments();
+  await loadClassesAndHomework();
+  renderSchedule();
+  renderHomework();
+  toast('Class removed from your schedule.');
+});
+
 async function loadCorrections() {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('corrections')
     .select('*, homework(title), profiles!corrections_submitted_by_fkey(full_name)')
     .eq('status', 'pending')
