@@ -3,7 +3,7 @@
 // ============================================
 const SUPABASE_URL = 'https://irrciwbcscmnjjaqclbp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlycmNpd2Jjc2NtbmpqYXFjbGJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MDIzNjQsImV4cCI6MjEwMzA3ODM2NH0.xfv9eTMse8wsyTwVOix9VfEcHeGs0pPKhahEKtNIr34';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null;
 let currentProfile = null;
@@ -55,20 +55,20 @@ document.querySelector('#authSubmit').addEventListener('click', async () => {
   if (!email || !password) return showAuthError('Please enter an email and password.');
   if (authMode === 'signup') {
     if (!name) return showAuthError('Please enter your full name.');
-    const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
+    const { error } = await db.auth.signUp({ email, password, options: { data: { full_name: name } } });
     if (error) return showAuthError(error.message);
     showAuthError('Account created! Check your email if confirmation is required, then sign in.');
   } else {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await db.auth.signInWithPassword({ email, password });
     if (error) return showAuthError(error.message);
   }
 });
 
 document.querySelector('#signOutButton').addEventListener('click', async () => {
-  await supabase.auth.signOut();
+  await db.auth.signOut();
 });
 
-supabase.auth.onAuthStateChange((_event, session) => {
+db.auth.onAuthStateChange((_event, session) => {
   if (session?.user) {
     currentUser = session.user;
     initializeApp();
@@ -81,7 +81,7 @@ supabase.auth.onAuthStateChange((_event, session) => {
 });
 
 async function initializeApp() {
-  const { data: profile, error } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single();
+  const { data: profile, error } = await db.from('profiles').select('*').eq('id', currentUser.id).single();
   if (error || !profile) {
     showAuthError('Could not load your profile. Try refreshing.');
     return;
@@ -115,11 +115,11 @@ const homeworkList = document.querySelector('#homeworkList');
 const courseFilter = document.querySelector('#courseFilter');
 
 async function loadClassesAndHomework() {
-  const { data: classesData } = await supabase.from('classes').select('*').order('name');
+  const { data: classesData } = await db.from('classes').select('*').order('name');
   classes = classesData || [];
 
-  const { data: homeworkData } = await supabase.from('homework').select('*, classes(*)').order('due_date', { ascending: true, nullsFirst: false });
-  const { data: completionsData } = await supabase.from('completions').select('homework_id').eq('student_id', currentUser.id);
+  const { data: homeworkData } = await db.from('homework').select('*, classes(*)').order('due_date', { ascending: true, nullsFirst: false });
+  const { data: completionsData } = await db.from('completions').select('homework_id').eq('student_id', currentUser.id);
   const completedSet = new Set((completionsData || []).map(c => c.homework_id));
 
   assignments = (homeworkData || []).map(h => ({
@@ -209,10 +209,10 @@ function renderHomework() {
 
 async function toggleCompletion(assignment) {
   if (!assignment.completed) {
-    await supabase.from('completions').insert({ student_id: currentUser.id, homework_id: assignment.id });
+    await db.from('completions').insert({ student_id: currentUser.id, homework_id: assignment.id });
     assignment.completed = true;
   } else {
-    await supabase.from('completions').delete().eq('student_id', currentUser.id).eq('homework_id', assignment.id);
+    await db.from('completions').delete().eq('student_id', currentUser.id).eq('homework_id', assignment.id);
     assignment.completed = false;
   }
   renderHomework();
@@ -369,7 +369,7 @@ document.querySelector('#submitModal').addEventListener('click', async () => {
   const homeworkId = document.querySelector('#correctionHomework')?.value;
   const suggestedChange = document.querySelector('#correctionText').value.trim();
   if (!homeworkId || !suggestedChange) return toast('Please pick an assignment and describe the change.');
-  const { error } = await supabase.from('corrections').insert({ homework_id: homeworkId, submitted_by: currentUser.id, suggested_change: suggestedChange });
+  const { error } = await db.from('corrections').insert({ homework_id: homeworkId, submitted_by: currentUser.id, suggested_change: suggestedChange });
   modal.classList.remove('open');
   if (error) return toast('Could not send your request. Try again.');
   toast('Sent to the StudyGroup moderators.');
@@ -446,7 +446,7 @@ document.querySelector('#addClassButton').addEventListener('click', async () => 
   const teacher = document.querySelector('#newClassTeacher').value.trim();
   const subject_code = document.querySelector('#newClassSubject').value;
   if (!name || !teacher) return toast('Please enter a class name and teacher.');
-  const { error } = await supabase.from('classes').insert({ name, teacher, subject_code, created_by: currentUser.id });
+  const { error } = await db.from('classes').insert({ name, teacher, subject_code, created_by: currentUser.id });
   if (error) return toast('Could not add class: ' + error.message);
   document.querySelector('#newClassName').value = '';
   document.querySelector('#newClassTeacher').value = '';
@@ -460,7 +460,7 @@ document.querySelector('#addClassButton').addEventListener('click', async () => 
 document.querySelector('#manageClassList').addEventListener('click', async event => {
   const button = event.target.closest('.delete-class');
   if (!button) return;
-  const { error } = await supabase.from('classes').delete().eq('id', button.dataset.id);
+  const { error } = await db.from('classes').delete().eq('id', button.dataset.id);
   if (error) return toast('Could not remove class — it may still have homework attached.');
   await loadClassesAndHomework();
   renderManageClasses();
@@ -480,7 +480,7 @@ document.querySelector('#postHomeworkButton').addEventListener('click', async ()
   const description = document.querySelector('#homeworkDescInput').value.trim();
   const due_date = document.querySelector('#homeworkDueInput').value || null;
   if (!class_id || !title) return toast('Please choose a class and enter a title.');
-  const { error } = await supabase.from('homework').insert({ class_id, title, description, due_date, created_by: currentUser.id });
+  const { error } = await db.from('homework').insert({ class_id, title, description, due_date, created_by: currentUser.id });
   if (error) return toast('Could not post homework: ' + error.message);
   document.querySelector('#homeworkTitleInput').value = '';
   document.querySelector('#homeworkDescInput').value = '';
@@ -508,7 +508,7 @@ function renderCorrections() {
 document.querySelector('#correctionsQueue').addEventListener('click', async event => {
   const button = event.target.closest('button[data-status]');
   if (!button) return;
-  const { error } = await supabase.from('corrections').update({ status: button.dataset.status, reviewed_by: currentUser.id }).eq('id', button.dataset.id);
+  const { error } = await db.from('corrections').update({ status: button.dataset.status, reviewed_by: currentUser.id }).eq('id', button.dataset.id);
   if (error) return toast('Could not update that request.');
   await loadCorrections();
   toast(button.dataset.status === 'approved' ? 'Correction approved.' : 'Correction rejected.');
