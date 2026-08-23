@@ -10,4 +10,6 @@ body{font-size:16px}.subtitle{font-size:16px}.soft-button,.primary-button,.dark-
 /* Calendar text is intentionally larger for easy scanning. */
 .calendar-controls .eyebrow{font:600 19px/1.2 Fraunces,serif;letter-spacing:0;text-transform:none;color:#405f50}.calendar-nav button{font-size:13px}.calendar-weekdays b{font-size:12px;padding:13px 11px}.day{height:126px;padding:10px}.day>span{font-size:13px}.calendar-event{font-size:12px;line-height:1.3;margin-top:29px;padding:5px 6px}.legend{gap:20px;font-size:13px;margin-top:17px}.legend-dot{width:10px;height:10px;margin-right:6px}.event-bg{background:#dce9dc!important;color:#416c53!important}
 
+.empty-homework{color:#788379;font-size:16px;font-family:'DM Sans',sans-serif;margin:0}
+
 @media(max-width:600px){.calendar-controls{text-align:left}.discussion-feed{max-height:440px}}
