@@ -106,6 +106,7 @@ async function initializeApp() {
   if (currentProfile.role === 'mod') {
     renderManageClasses();
     populateHomeworkClassSelect();
+    renderManageHomework();
     await loadCorrections();
   }
 }
@@ -142,6 +143,7 @@ async function loadClassesAndHomework() {
     title: h.title,
     description: h.description || '',
     dueDate: h.due_date ? new Date(h.due_date + 'T00:00:00') : null,
+    dueDateRaw: h.due_date || '',
     due: h.due_date ? new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(h.due_date + 'T00:00:00')) : 'No due date',
     completed: completedSet.has(h.id),
     enrolled: enrolledClassIds.has(h.class_id)
@@ -513,6 +515,7 @@ document.querySelector('#addClassButton').addEventListener('click', async () => 
   await loadClassesAndHomework();
   renderManageClasses();
   populateHomeworkClassSelect();
+  renderManageHomework();
   renderHomework();
   toast('Class added.');
 });
@@ -525,6 +528,7 @@ document.querySelector('#manageClassList').addEventListener('click', async event
   await loadClassesAndHomework();
   renderManageClasses();
   populateHomeworkClassSelect();
+  renderManageHomework();
   renderHomework();
   toast('Class removed.');
 });
@@ -547,7 +551,84 @@ document.querySelector('#postHomeworkButton').addEventListener('click', async ()
   document.querySelector('#homeworkDueInput').value = '';
   await loadClassesAndHomework();
   renderHomework();
+  renderManageHomework();
   toast('Homework posted.');
+});
+
+// ============================================
+// Mod tools: view, edit, and delete any existing homework
+// ============================================
+function escapeAttr(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+let editingHomeworkId = null;
+
+function renderManageHomework() {
+  const container = document.querySelector('#manageHomeworkList');
+  if (!container) return;
+  if (!assignments.length) {
+    container.innerHTML = '<p class="empty-homework">No homework posted yet.</p>';
+    return;
+  }
+  container.innerHTML = assignments.map(a => {
+    if (a.id === editingHomeworkId) {
+      const classOptions = classes.map(c => `<option value="${c.id}" ${c.id === a.classId ? 'selected' : ''}>${c.name}</option>`).join('');
+      return `<div class="manage-homework-row editing" data-id="${a.id}"><div class="manage-form">
+        <label>Class<select class="edit-class">${classOptions}</select></label>
+        <label>Title<input class="edit-title" type="text" value="${escapeAttr(a.title)}"></label>
+        <label>Description<textarea class="edit-description">${a.description || ''}</textarea></label>
+        <label>Due date<input class="edit-due" type="date" value="${a.dueDate ? a.dueDate.toISOString().slice(0, 10) : ''}"></label>
+        <div class="correction-actions"><button class="approve save-homework" data-id="${a.id}">Save</button><button class="reject cancel-homework" data-id="${a.id}">Cancel</button></div>
+      </div></div>`;
+    }
+    return `<div class="manage-homework-row" data-id="${a.id}">
+      <div><span class="course-tag ${assignmentTagColor(a.subject)}">${a.course}</span><b>${a.title}</b><p>${a.description || 'No description'}</p><small>Due ${a.due} · Posted by ${a.postedBy}</small></div>
+      <div class="correction-actions"><button class="approve edit-homework" data-id="${a.id}">Edit</button><button class="reject delete-homework" data-id="${a.id}">Delete</button></div>
+    </div>`;
+  }).join('');
+}
+
+document.querySelector('#manageHomeworkList').addEventListener('click', async event => {
+  const editButton = event.target.closest('.edit-homework');
+  if (editButton) {
+    editingHomeworkId = editButton.dataset.id;
+    renderManageHomework();
+    return;
+  }
+  const cancelButton = event.target.closest('.cancel-homework');
+  if (cancelButton) {
+    editingHomeworkId = null;
+    renderManageHomework();
+    return;
+  }
+  const deleteButton = event.target.closest('.delete-homework');
+  if (deleteButton) {
+    if (!window.confirm('Delete this homework? This cannot be undone.')) return;
+    const { error } = await db.from('homework').delete().eq('id', deleteButton.dataset.id);
+    if (error) return toast('Could not delete homework: ' + error.message);
+    await loadClassesAndHomework();
+    renderHomework();
+    renderManageHomework();
+    toast('Homework deleted.');
+    return;
+  }
+  const saveButton = event.target.closest('.save-homework');
+  if (saveButton) {
+    const row = saveButton.closest('.manage-homework-row');
+    const class_id = row.querySelector('.edit-class').value;
+    const title = row.querySelector('.edit-title').value.trim();
+    const description = row.querySelector('.edit-description').value.trim();
+    const due_date = row.querySelector('.edit-due').value || null;
+    if (!class_id || !title) return toast('Please choose a class and enter a title.');
+    const { error } = await db.from('homework').update({ class_id, title, description, due_date }).eq('id', saveButton.dataset.id);
+    if (error) return toast('Could not update homework: ' + error.message);
+    editingHomeworkId = null;
+    await loadClassesAndHomework();
+    renderHomework();
+    renderManageHomework();
+    toast('Homework updated.');
+  }
 });
 
 // ============================================
