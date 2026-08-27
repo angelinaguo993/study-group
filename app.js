@@ -12,6 +12,15 @@ let assignments = [];
 let corrections = [];
 let enrolledClassIds = new Set();
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const resources = [
   { title: 'Derivative rules at a glance', type: 'Study guide', subject: 'AP Calc', collection: 'AP', author: 'Maya Thompson', icon: '✦', color: 'green-paper' },
   { title: 'Calorimetry practice problems', type: 'Practice', subject: 'Chemistry', collection: 'IB', author: 'Jordan Lee', icon: '▤', color: 'purple-paper' },
@@ -171,7 +180,7 @@ function updateDashboardAssignments() {
     document.querySelector('#focusDot').className = `subject-dot ${focus.subject}`;
     document.querySelector('#focusDot').textContent = assignmentIcon(focus.subject);
     document.querySelector('#focusTitle').textContent = focus.title;
-    document.querySelector('#focusMeta').innerHTML = `${focus.course} <span>·</span> ${focus.teacher}`;
+    document.querySelector('#focusMeta').innerHTML = `${escapeHtml(focus.course)} <span>·</span> ${escapeHtml(focus.teacher)}`;
     document.querySelector('#focusFooter').textContent = `Posted by ${focus.postedBy}`;
     const focusButton = document.querySelector('#completeFocus');
     focusButton.dataset.id = focus.id;
@@ -181,7 +190,7 @@ function updateDashboardAssignments() {
 
   dashboardAssignments.innerHTML = overviewAssignments.map(a => {
     const initials = (a.teacher || '').split(' ').map(part => part[0]).join('').slice(0, 2);
-    return `<article class="assignment-card" data-id="${a.id}"><div class="card-meta"><span class="course-tag ${assignmentTagColor(a.subject)}">${a.course}</span><span>Due ${a.due}</span></div><h3>${a.title}</h3><p>${a.description}</p><div class="card-bottom"><span class="teacher"><i class="mini-avatar">${initials}</i> ${a.teacher}</span><button class="circle-check dashboard-check" aria-label="Complete assignment">✓</button></div></article>`;
+    return `<article class="assignment-card" data-id="${a.id}"><div class="card-meta"><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><span>Due ${escapeHtml(a.due)}</span></div><h3>${escapeHtml(a.title)}</h3><p>${escapeHtml(a.description)}</p><div class="card-bottom"><span class="teacher"><i class="mini-avatar">${escapeHtml(initials)}</i> ${escapeHtml(a.teacher)}</span><button class="circle-check dashboard-check" aria-label="Complete assignment">✓</button></div></article>`;
   }).join('');
 
   const remaining = upcoming.length;
@@ -216,7 +225,7 @@ function updateFilterCounts() {
 function renderHomework() {
   const visibleAssignments = matchingAssignments();
   homeworkList.innerHTML = visibleAssignments.length ? visibleAssignments.map(a => {
-    return `<article class="homework-row ${a.completed ? 'is-complete' : ''}"><span class="subject-dot ${a.subject}">${assignmentIcon(a.subject)}</span><div class="homework-main"><span class="course-tag ${assignmentTagColor(a.subject)}">${a.course}</span><h3>${a.title}</h3><p>${a.description}</p><small>${a.teacher}</small></div><div class="homework-due"><b>${a.due}</b><small>Due date</small></div><button class="circle-check homework-check ${a.completed ? 'done' : ''}" data-id="${a.id}" aria-label="${a.completed ? 'Mark incomplete' : 'Mark complete'}">✓</button></article>`;
+    return `<article class="homework-row ${a.completed ? 'is-complete' : ''}"><span class="subject-dot ${a.subject}">${assignmentIcon(a.subject)}</span><div class="homework-main"><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><h3>${escapeHtml(a.title)}</h3><p>${escapeHtml(a.description)}</p><small>${escapeHtml(a.teacher)}</small></div><div class="homework-due"><b>${escapeHtml(a.due)}</b><small>Due date</small></div><button class="circle-check homework-check ${a.completed ? 'done' : ''}" data-id="${a.id}" aria-label="${a.completed ? 'Mark incomplete' : 'Mark complete'}">✓</button></article>`;
   }).join('') : '<p class="empty-homework">No assignments found for this view.</p>';
   updateFilterCounts();
   updateDashboardAssignments();
@@ -309,7 +318,10 @@ function renderResources() {
     (activeResourceCollection === 'all' || resource.collection === activeResourceCollection) &&
     (activeResourceSubject === 'all' || resource.subject === activeResourceSubject)
   );
-  resourceGrid.innerHTML = visibleResources.length ? visibleResources.map(resource => `<article class="resource-card" data-index="${resources.indexOf(resource)}"><div class="resource-icon ${resource.color}">${resource.icon}</div><div><span class="resource-type">${resource.type.toUpperCase()} · ${resource.subject.toUpperCase()}</span><h3>${resource.title}</h3><p>Shared by ${resource.author}</p>${resource.link ? `<a class="resource-link" href="${resource.link}" target="_blank" rel="noopener">Open resource →</a>` : ''}</div><button aria-label="Save ${resource.title}">⌑</button>${currentProfile?.role === 'mod' ? `<button class="mod-delete" aria-label="Delete resource">🗑</button>` : ''}</article>`).join('') : '<p class="empty-resources">No resources in this collection yet.</p>';
+  resourceGrid.innerHTML = visibleResources.length ? visibleResources.map(resource => {
+    const safeLink = /^https?:\/\//i.test(resource.link || '') ? resource.link : null;
+    return `<article class="resource-card" data-index="${resources.indexOf(resource)}"><div class="resource-icon ${resource.color}">${resource.icon}</div><div><span class="resource-type">${escapeHtml(resource.type).toUpperCase()} · ${escapeHtml(resource.subject).toUpperCase()}</span><h3>${escapeHtml(resource.title)}</h3><p>Shared by ${escapeHtml(resource.author)}</p>${safeLink ? `<a class="resource-link" href="${escapeHtml(safeLink)}" target="_blank" rel="noopener noreferrer">Open resource →</a>` : ''}</div><button aria-label="Save ${escapeHtml(resource.title)}">⌑</button>${currentProfile?.role === 'mod' ? `<button class="mod-delete" aria-label="Delete resource">🗑</button>` : ''}</article>`;
+  }).join('') : '<p class="empty-resources">No resources in this collection yet.</p>';
 }
 resourceGrid.addEventListener('click', event => {
   const button = event.target.closest('.mod-delete');
@@ -345,7 +357,7 @@ function openModal(title, text, type = 'correction') {
   } else if (type === 'discussion') {
     modalFields.innerHTML = '<label>Title of post<input id="discussionTitle" type="text" placeholder="What do you want to discuss?" required></label><label>Description of post<textarea id="discussionDescription" placeholder="Add context or a question for your classmates." required></textarea></label>';
   } else {
-    const options = assignments.map(a => `<option value="${a.id}">${a.course} — ${a.title}</option>`).join('');
+    const options = assignments.map(a => `<option value="${a.id}">${escapeHtml(a.course)} — ${escapeHtml(a.title)}</option>`).join('');
     modalFields.innerHTML = `<label>Which assignment?<select id="correctionHomework">${options || '<option value="">No homework posted yet</option>'}</select></label><label>What needs to change?<textarea id="correctionText" placeholder="Describe the issue or update…"></textarea></label>`;
   }
   document.querySelector('#submitModal').textContent = type === 'resource' ? 'Share resource' : type === 'discussion' ? 'Create post' : 'Send request';
@@ -382,7 +394,7 @@ document.querySelector('#submitModal').addEventListener('click', async () => {
     if (!title || !description) return toast('Please add a title and description.');
     const post = document.createElement('article');
     post.className = 'community-post';
-    post.innerHTML = `<div class="post-head"><i class="mini-avatar green">${initialsOf(currentProfile.full_name)}</i><div><b>${currentProfile.full_name}</b><p>Just now</p></div></div><h3 class="discussion-title"></h3><p class="discussion-description"></p><div class="post-actions"><button class="heart-button" aria-label="Like post">♡ <span>0</span></button><button class="replies-toggle" aria-expanded="false">◌ <span>0 replies</span></button></div><div class="replies" hidden></div>`;
+    post.innerHTML = `<div class="post-head"><i class="mini-avatar green">${escapeHtml(initialsOf(currentProfile.full_name))}</i><div><b>${escapeHtml(currentProfile.full_name)}</b><p>Just now</p></div></div><h3 class="discussion-title"></h3><p class="discussion-description"></p><div class="post-actions"><button class="heart-button" aria-label="Like post">♡ <span>0</span></button><button class="replies-toggle" aria-expanded="false">◌ <span>0 replies</span></button></div><div class="replies" hidden></div>`;
     post.querySelector('.discussion-title').textContent = title;
     post.querySelector('.discussion-description').textContent = description;
     setupDiscussionPost(post);
@@ -483,7 +495,7 @@ document.querySelector('.discussion-feed').addEventListener('submit', event => {
   const replyText = input.value.trim();
   if (!replyText) return;
   const reply = document.createElement('p');
-  reply.innerHTML = `<b>${currentProfile.full_name}</b> · `;
+  reply.innerHTML = `<b>${escapeHtml(currentProfile.full_name)}</b> · `;
   reply.append(replyText);
   const heart = document.createElement('button');
   heart.className = 'heart-button reply-heart';
@@ -501,7 +513,7 @@ document.querySelector('.discussion-feed').addEventListener('submit', event => {
 
 function renderManageClasses() {
   const list = document.querySelector('#manageClassList');
-  list.innerHTML = classes.length ? classes.map(c => `<div class="class-setting"><span class="subject-dot ${c.subject_code}">${assignmentIcon(c.subject_code)}</span><div><b>${c.name}</b><p>${c.teacher}</p></div><button class="delete-class" data-id="${c.id}">Remove</button></div>`).join('') : '<p class="empty-homework">No classes yet — add one below.</p>';
+  list.innerHTML = classes.length ? classes.map(c => `<div class="class-setting"><span class="subject-dot ${c.subject_code}">${assignmentIcon(c.subject_code)}</span><div><b>${escapeHtml(c.name)}</b><p>${escapeHtml(c.teacher)}</p></div><button class="delete-class" data-id="${c.id}">Remove</button></div>`).join('') : '<p class="empty-homework">No classes yet — add one below.</p>';
 }
 
 document.querySelector('#addClassButton').addEventListener('click', async () => {
@@ -535,7 +547,7 @@ document.querySelector('#manageClassList').addEventListener('click', async event
 
 function populateHomeworkClassSelect() {
   const select = document.querySelector('#homeworkClassSelect');
-  select.innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('') || '<option value="">Add a class first</option>';
+  select.innerHTML = classes.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('') || '<option value="">Add a class first</option>';
 }
 
 document.querySelector('#postHomeworkButton').addEventListener('click', async () => {
@@ -558,10 +570,6 @@ document.querySelector('#postHomeworkButton').addEventListener('click', async ()
 // ============================================
 // Mod tools: view, edit, and delete any existing homework
 // ============================================
-function escapeAttr(value) {
-  return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-}
-
 let editingHomeworkId = null;
 
 function renderManageHomework() {
@@ -573,17 +581,17 @@ function renderManageHomework() {
   }
   container.innerHTML = assignments.map(a => {
     if (a.id === editingHomeworkId) {
-      const classOptions = classes.map(c => `<option value="${c.id}" ${c.id === a.classId ? 'selected' : ''}>${c.name}</option>`).join('');
+      const classOptions = classes.map(c => `<option value="${c.id}" ${c.id === a.classId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
       return `<div class="manage-homework-row editing" data-id="${a.id}"><div class="manage-form">
         <label>Class<select class="edit-class">${classOptions}</select></label>
-        <label>Title<input class="edit-title" type="text" value="${escapeAttr(a.title)}"></label>
-        <label>Description<textarea class="edit-description">${a.description || ''}</textarea></label>
+        <label>Title<input class="edit-title" type="text" value="${escapeHtml(a.title)}"></label>
+        <label>Description<textarea class="edit-description">${escapeHtml(a.description || '')}</textarea></label>
         <label>Due date<input class="edit-due" type="date" value="${a.dueDate ? a.dueDate.toISOString().slice(0, 10) : ''}"></label>
         <div class="correction-actions"><button class="approve save-homework" data-id="${a.id}">Save</button><button class="reject cancel-homework" data-id="${a.id}">Cancel</button></div>
       </div></div>`;
     }
     return `<div class="manage-homework-row" data-id="${a.id}">
-      <div><span class="course-tag ${assignmentTagColor(a.subject)}">${a.course}</span><b>${a.title}</b><p>${a.description || 'No description'}</p><small>Due ${a.due} · Posted by ${a.postedBy}</small></div>
+      <div><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><b>${escapeHtml(a.title)}</b><p>${escapeHtml(a.description || 'No description')}</p><small>Due ${escapeHtml(a.due)} · Posted by ${escapeHtml(a.postedBy)}</small></div>
       <div class="correction-actions"><button class="approve edit-homework" data-id="${a.id}">Edit</button><button class="reject delete-homework" data-id="${a.id}">Delete</button></div>
     </div>`;
   }).join('');
@@ -637,11 +645,11 @@ document.querySelector('#manageHomeworkList').addEventListener('click', async ev
 function renderSchedule() {
   const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
   const list = document.querySelector('#scheduleList');
-  list.innerHTML = enrolledClasses.length ? enrolledClasses.map(c => `<div class="class-setting"><span class="subject-dot ${c.subject_code}">${assignmentIcon(c.subject_code)}</span><div><b>${c.name}</b><p>${c.teacher}</p></div><button class="remove-schedule-class" data-id="${c.id}">Remove</button></div>`).join('') : '<p class="empty-homework">You haven\'t added any classes yet.</p>';
+  list.innerHTML = enrolledClasses.length ? enrolledClasses.map(c => `<div class="class-setting"><span class="subject-dot ${c.subject_code}">${assignmentIcon(c.subject_code)}</span><div><b>${escapeHtml(c.name)}</b><p>${escapeHtml(c.teacher)}</p></div><button class="remove-schedule-class" data-id="${c.id}">Remove</button></div>`).join('') : '<p class="empty-homework">You haven\'t added any classes yet.</p>';
 
   const notEnrolled = classes.filter(c => !enrolledClassIds.has(c.id));
   const select = document.querySelector('#addScheduleClass');
-  select.innerHTML = notEnrolled.length ? notEnrolled.map(c => `<option value="${c.id}">${c.name}</option>`).join('') : '<option value="">No more classes to add</option>';
+  select.innerHTML = notEnrolled.length ? notEnrolled.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('') : '<option value="">No more classes to add</option>';
 }
 
 document.querySelector('#addScheduleButton').addEventListener('click', async () => {
@@ -680,7 +688,7 @@ async function loadCorrections() {
 
 function renderCorrections() {
   const container = document.querySelector('#correctionsQueue');
-  container.innerHTML = corrections.length ? corrections.map(c => `<div class="correction-row"><p><b>${c.profiles?.full_name || 'A student'}</b> on <i>${c.homework?.title || 'a deleted assignment'}</i></p><p>${c.suggested_change}</p><div class="correction-actions"><button class="approve" data-id="${c.id}" data-status="approved">Approve</button><button class="reject" data-id="${c.id}" data-status="rejected">Reject</button></div></div>`).join('') : '<p class="empty-homework">No pending corrections.</p>';
+  container.innerHTML = corrections.length ? corrections.map(c => `<div class="correction-row"><p><b>${escapeHtml(c.profiles?.full_name || 'A student')}</b> on <i>${escapeHtml(c.homework?.title || 'a deleted assignment')}</i></p><p>${escapeHtml(c.suggested_change)}</p><div class="correction-actions"><button class="approve" data-id="${c.id}" data-status="approved">Approve</button><button class="reject" data-id="${c.id}" data-status="rejected">Reject</button></div></div>`).join('') : '<p class="empty-homework">No pending corrections.</p>';
 }
 
 document.querySelector('#correctionsQueue').addEventListener('click', async event => {
