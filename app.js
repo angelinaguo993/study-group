@@ -49,6 +49,7 @@ function setAuthMode(mode) {
   document.querySelector('#authHeading').textContent = mode === 'signin' ? 'Sign in' : 'Create your account';
   document.querySelector('#authSubtitle').textContent = mode === 'signin' ? 'Welcome back — sign in to see your homework.' : 'Set up your StudyGroup account.';
   document.querySelector('#authNameField').hidden = mode === 'signin';
+  document.querySelector('#authEmailField').hidden = mode === 'signin';
   document.querySelector('#authSubmit').textContent = mode === 'signin' ? 'Sign in' : 'Sign up';
   document.querySelector('#authToggle').innerHTML = mode === 'signin'
     ? `Don't have an account? <button type="button" id="authSwitch">Sign up</button>`
@@ -58,19 +59,24 @@ function setAuthMode(mode) {
 setAuthMode('signin');
 
 document.querySelector('#authSubmit').addEventListener('click', async () => {
-  const email = document.querySelector('#authEmail').value.trim();
+  const username = document.querySelector('#authUsername').value.trim();
   const password = document.querySelector('#authPassword').value;
-  const name = document.querySelector('#authName').value.trim();
   showAuthError('');
-  if (!email || !password) return showAuthError('Please enter an email and password.');
+  if (!username || !password) return showAuthError('Please enter a username and password.');
+
   if (authMode === 'signup') {
+    const email = document.querySelector('#authEmail').value.trim();
+    const name = document.querySelector('#authName').value.trim();
     if (!name) return showAuthError('Please enter your full name.');
-    const { error } = await db.auth.signUp({ email, password, options: { data: { full_name: name } } });
-    if (error) return showAuthError(error.message);
+    if (!email) return showAuthError('Please enter your email.');
+    const { error } = await db.auth.signUp({ email, password, options: { data: { full_name: name, username } } });
+    if (error) return showAuthError(error.message.includes('duplicate') || error.message.includes('unique') ? 'That username is already taken.' : error.message);
     showAuthError('Account created! Check your email if confirmation is required, then sign in.');
   } else {
-    const { error } = await db.auth.signInWithPassword({ email, password });
-    if (error) return showAuthError(error.message);
+    const { data: resolvedEmail, error: lookupError } = await db.rpc('get_email_by_username', { uname: username });
+    if (lookupError || !resolvedEmail) return showAuthError('Invalid username or password.');
+    const { error } = await db.auth.signInWithPassword({ email: resolvedEmail, password });
+    if (error) return showAuthError('Invalid username or password.');
   }
 });
 
@@ -279,11 +285,14 @@ const events = {
 };
 const grid = document.querySelector('#calendarGrid');
 const calendarMonth = document.querySelector('#calendarMonth');
-const currentMonthIndex = 9;
-const currentDay = 21;
+const todayDate = new Date();
+const currentMonthIndex = todayDate.getMonth();
+const currentDay = todayDate.getDate();
+const currentYear = todayDate.getFullYear();
 let displayedMonth = currentMonthIndex;
+let displayedYear = currentYear;
 function renderCalendar() {
-  const year = 2026;
+  const year = displayedYear;
   const firstDay = new Date(year, displayedMonth, 1).getDay();
   const mondayFirstOffset = (firstDay + 6) % 7;
   const daysInMonth = new Date(year, displayedMonth + 1, 0).getDate();
@@ -293,14 +302,14 @@ function renderCalendar() {
     const day = index - mondayFirstOffset + 1;
     const isCurrentMonth = day > 0 && day <= daysInMonth;
     const event = isCurrentMonth ? events[displayedMonth]?.[day] : null;
-    const isToday = isCurrentMonth && displayedMonth === currentMonthIndex && day === currentDay;
+    const isToday = isCurrentMonth && displayedMonth === currentMonthIndex && displayedYear === currentYear && day === currentDay;
     return `<div class="day ${isToday ? 'today' : ''} ${!isCurrentMonth ? 'empty-day' : ''}"><span>${isCurrentMonth ? day : ''}</span>${event ? `<div class="calendar-event ${event[1]}">${event[0]}</div>` : ''}</div>`;
   }).join('');
 }
 renderCalendar();
-document.querySelector('#previousMonth').addEventListener('click', () => { displayedMonth = (displayedMonth + 11) % 12; renderCalendar(); });
-document.querySelector('#nextMonth').addEventListener('click', () => { displayedMonth = (displayedMonth + 1) % 12; renderCalendar(); });
-document.querySelector('#todayButton').addEventListener('click', () => { displayedMonth = currentMonthIndex; renderCalendar(); });
+document.querySelector('#previousMonth').addEventListener('click', () => { if (displayedMonth === 0) { displayedMonth = 11; displayedYear--; } else { displayedMonth--; } renderCalendar(); });
+document.querySelector('#nextMonth').addEventListener('click', () => { if (displayedMonth === 11) { displayedMonth = 0; displayedYear++; } else { displayedMonth++; } renderCalendar(); });
+document.querySelector('#todayButton').addEventListener('click', () => { displayedMonth = currentMonthIndex; displayedYear = currentYear; renderCalendar(); });
 
 const currentDate = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
 document.querySelector('#topbarDate').textContent = currentDate;
@@ -414,7 +423,6 @@ document.querySelector('#submitModal').addEventListener('click', async () => {
   if (currentProfile.role === 'mod') await loadCorrections();
 });
 document.querySelector('#editSchedule').addEventListener('click', ()=>document.querySelector('[data-view="settings"]').click());
-document.querySelector('#searchButton').addEventListener('click', ()=>toast('Search is coming soon. Try browsing your classes.'));
 document.querySelector('#profileButton').addEventListener('click', ()=>toast(`Signed in as ${currentProfile.full_name} · ${currentProfile.role === 'mod' ? 'Moderator' : 'Student'}`));
 
 function setupDiscussionPost(post) {

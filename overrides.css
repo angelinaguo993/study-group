@@ -17,6 +17,11 @@ body{font-size:16px}.subtitle{font-size:16px}.soft-button,.primary-button,.dark-
    hidden actually hide the element again — critical for the mod-only nav link. */
 .nav-link[hidden]{display:none!important}
 #authNameField[hidden]{display:none!important}
+#authEmailField[hidden]{display:none!important}
+
+.add-class{cursor:pointer;transition:background-color .12s ease,border-color .12s ease,transform .05s ease}
+.add-class:hover{background:#e6efe5;border-color:#a9c4aa;color:#3a5c47}
+.add-class:active{transform:scale(0.97);background:#d9e8d8}
 
 .auth-backdrop{position:fixed;inset:0;background:#f1f5ef;display:grid;place-items:center;z-index:20}
 .auth-backdrop.hidden{display:none}
