@@ -12,6 +12,12 @@ body{font-size:16px}.subtitle{font-size:16px}.soft-button,.primary-button,.dark-
 
 .empty-homework{color:#788379;font-size:16px;font-family:'DM Sans',sans-serif;margin:0}
 
+/* .nav-link sets display:flex, which otherwise silently overrides the
+   browser's built-in [hidden] behavior at equal CSS specificity. This makes
+   hidden actually hide the element again — critical for the mod-only nav link. */
+.nav-link[hidden]{display:none!important}
+#authNameField[hidden]{display:none!important}
+
 .auth-backdrop{position:fixed;inset:0;background:#f1f5ef;display:grid;place-items:center;z-index:20}
 .auth-backdrop.hidden{display:none}
 .auth-card{width:min(380px,calc(100% - 32px));background:#fff;border:1px solid #e1e8e0;border-radius:12px;padding:28px}
