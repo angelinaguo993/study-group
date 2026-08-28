@@ -23,6 +23,10 @@ body{font-size:16px}.subtitle{font-size:16px}.soft-button,.primary-button,.dark-
 .add-class:hover{background:#e6efe5;border-color:#a9c4aa;color:#3a5c47}
 .add-class:active{transform:scale(0.97);background:#d9e8d8}
 
+.class-setting button{cursor:pointer;transition:background-color .12s ease,color .12s ease,transform .05s ease}
+.class-setting button:hover{background:#e3ede2;color:#3a5c47}
+.class-setting button:active{transform:scale(0.96);background:#d5e6d4}
+
 .auth-backdrop{position:fixed;inset:0;background:#f1f5ef;display:grid;place-items:center;z-index:20}
 .auth-backdrop.hidden{display:none}
 .auth-card{width:min(380px,calc(100% - 32px));background:#fff;border:1px solid #e1e8e0;border-radius:12px;padding:28px}
