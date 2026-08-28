@@ -112,11 +112,13 @@ async function initializeApp() {
   renderSchedule();
   renderResources();
   applyModDiscussionControls();
+  await refreshModRequestUI();
   if (currentProfile.role === 'mod') {
     renderManageClasses();
     populateHomeworkClassSelect();
     renderManageHomework();
     await loadCorrections();
+    await loadModRequests();
   }
 }
 
@@ -304,7 +306,7 @@ const currentDate = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: '
 document.querySelector('#topbarDate').textContent = currentDate;
 document.querySelector('#dashboardDate').textContent = currentDate;
 
-document.querySelectorAll('[data-view]').forEach(link => link.addEventListener('click', e => { e.preventDefault(); const view = link.dataset.view; document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view')); document.querySelector('#' + view).classList.add('active-view'); document.querySelectorAll('.nav-link').forEach(n => n.classList.toggle('active', n.dataset.view === view)); document.querySelector('#crumb').innerHTML = `${view === 'dashboard' ? 'Dashboard' : view[0].toUpperCase() + view.slice(1)} <span>/</span> ${view === 'dashboard' ? currentDate : 'Interlake High School'}`; window.scrollTo(0,0); if (view === 'manage' && currentProfile?.role === 'mod') loadCorrections(); }));
+document.querySelectorAll('[data-view]').forEach(link => link.addEventListener('click', e => { e.preventDefault(); const view = link.dataset.view; document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view')); document.querySelector('#' + view).classList.add('active-view'); document.querySelectorAll('.nav-link').forEach(n => n.classList.toggle('active', n.dataset.view === view)); document.querySelector('#crumb').innerHTML = `${view === 'dashboard' ? 'Dashboard' : view[0].toUpperCase() + view.slice(1)} <span>/</span> ${view === 'dashboard' ? currentDate : 'Interlake High School'}`; window.scrollTo(0,0); if (view === 'manage' && currentProfile?.role === 'mod') { loadCorrections(); loadModRequests(); } }));
 function toast(message) { const t = document.querySelector('#toast'); t.textContent = message; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2600); }
 
 const resourceGrid = document.querySelector('#resourceGrid');
@@ -674,6 +676,70 @@ document.querySelector('#scheduleList').addEventListener('click', async event =>
   renderSchedule();
   renderHomework();
   toast('Class removed from your schedule.');
+});
+
+// ============================================
+// Moderator access requests
+// ============================================
+async function refreshModRequestUI() {
+  if (currentProfile.role === 'mod') {
+    document.querySelector('#modRequestCard').hidden = true; // mods don't need to request access
+    return;
+  }
+  document.querySelector('#modRequestCard').hidden = false;
+  const { data } = await db.from('mod_requests').select('status').eq('user_id', currentUser.id).order('requested_at', { ascending: false }).limit(1);
+  const latest = data?.[0];
+  const statusEl = document.querySelector('#modRequestStatus');
+  const form = document.querySelector('#modRequestForm');
+  if (latest?.status === 'pending') {
+    statusEl.textContent = 'Your request is pending review by a moderator.';
+    form.hidden = true;
+  } else if (latest?.status === 'rejected') {
+    statusEl.textContent = 'Your last request was not approved. You can send a new one below.';
+    form.hidden = false;
+  } else {
+    statusEl.textContent = 'Moderators can post homework, manage classes, and review corrections.';
+    form.hidden = false;
+  }
+}
+
+document.querySelector('#requestModButton').addEventListener('click', async () => {
+  const message = document.querySelector('#modRequestMessage').value.trim();
+  const { error } = await db.from('mod_requests').insert({ user_id: currentUser.id, message: message || null });
+  if (error) return toast(error.code === '23505' ? 'You already have a pending request.' : 'Could not send your request.');
+  document.querySelector('#modRequestMessage').value = '';
+  await refreshModRequestUI();
+  toast('Mod access requested.');
+});
+
+async function loadModRequests() {
+  const { data } = await db
+    .from('mod_requests')
+    .select('*, profiles!mod_requests_user_id_fkey(full_name)')
+    .eq('status', 'pending')
+    .order('requested_at', { ascending: false });
+  renderModRequests(data || []);
+}
+
+function renderModRequests(requests) {
+  const container = document.querySelector('#modRequestsQueue');
+  container.innerHTML = requests.length ? requests.map(r => `<div class="correction-row"><p><b>${escapeHtml(r.profiles?.full_name || 'A student')}</b> wants mod access</p>${r.message ? `<p>${escapeHtml(r.message)}</p>` : ''}<div class="correction-actions"><button class="approve" data-id="${r.id}" data-action="approve">Approve</button><button class="reject" data-id="${r.id}" data-action="reject">Reject</button></div></div>`).join('') : '<p class="empty-homework">No pending mod requests.</p>';
+}
+
+document.querySelector('#modRequestsQueue').addEventListener('click', async event => {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  const requestId = button.dataset.id;
+  if (button.dataset.action === 'approve') {
+    const { error } = await db.rpc('approve_mod_request', { request_id: requestId });
+    if (error) return toast('Could not approve: ' + error.message);
+    toast('Approved — they are now a moderator.');
+  } else {
+    const { error } = await db.from('mod_requests').update({ status: 'rejected', reviewed_by: currentUser.id }).eq('id', requestId);
+    if (error) return toast('Could not reject that request.');
+    toast('Request rejected.');
+  }
+  await loadModRequests();
 });
 
 async function loadCorrections() {
