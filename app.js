@@ -557,7 +557,13 @@ document.querySelector('#manageClassList').addEventListener('click', async event
 
 function populateHomeworkClassSelect() {
   const select = document.querySelector('#homeworkClassSelect');
-  select.innerHTML = classes.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('') || '<option value="">Add a class first</option>';
+
+  select.innerHTML = classes.map(c => {
+    const className = escapeHtml(c.name);
+    const teacherName = escapeHtml(c.teacher || 'Teacher not specified');
+
+    return `<option value="${c.id}">${className} (${teacherName})</option>`;
+  }).join('') || '<option value="">Add a class first</option>';
 }
 
 document.querySelector('#postHomeworkButton').addEventListener('click', async () => {
