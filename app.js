@@ -10,7 +10,6 @@ let currentProfile = null;
 let classes = [];
 let assignments = [];
 let corrections = [];
-let calendarEvents = [];
 let enrolledClassIds = new Set();
 
 function escapeHtml(value) {
@@ -124,11 +123,9 @@ async function initializeApp() {
     renderManageClasses();
     populateHomeworkClassSelect();
     renderManageHomework();
-    await loadCalendarEvents();
-    renderManageEvents();
     await loadCorrections();
     await loadModRequests();
-  } 
+  }
 }
 
 function initialsOf(name) {
@@ -153,13 +150,6 @@ async function loadClassesAndHomework() {
   const { data: completionsData } = await db.from('completions').select('homework_id').eq('student_id', currentUser.id);
   const completedSet = new Set((completionsData || []).map(c => c.homework_id));
 
-  const { data: calendarEventsData, error: calendarEventsError } = await db
-  .from('calendar_events')
-  .select('*')
-  .order('event_date', { ascending: true });
-
-  calendarEvents = calendarEventsError ? [] : (calendarEventsData || []);
-
   assignments = (homeworkData || []).map(h => ({
     id: h.id,
     classId: h.class_id,
@@ -178,9 +168,6 @@ async function loadClassesAndHomework() {
 
   const courseNames = [...new Set(classes.map(c => c.name))];
   courseFilter.innerHTML = `<option>All classes</option>${courseNames.map(course => `<option>${course}</option>`).join('')}`;
-  if (typeof renderCalendar === 'function') {
-    renderCalendar();
-  }
 }
 
 function assignmentTagColor(subject) { return subject === 'chem' ? 'purple' : ['history', 'spanish'].includes(subject) ? 'gold' : 'blue'; }
@@ -241,6 +228,7 @@ function updateFilterCounts() {
     all: assignments.length
   };
   document.querySelectorAll('.filter').forEach(button => { button.querySelector('b').textContent = counts[button.dataset.filter]; });
+  document.querySelector('#homeworkNavCount').textContent = counts.yours;
 }
 
 function renderHomework() {
@@ -291,180 +279,38 @@ document.querySelectorAll('.filter').forEach(button => button.addEventListener('
 }));
 courseFilter.addEventListener('change', renderHomework);
 
-// ============================================
-// Calendar
-// ============================================
+const events = {
+  8: { 15: ['Picture Day', 'event-bg'] },
+  9: { 1: ['Calculus', 'blue-bg'], 3: ['Chemistry lab', 'purple-bg'], 8: ['English reading', 'orange-bg'], 10: ['Problem Set 3.4', 'blue-bg'], 11: ['Chem lab report', 'purple-bg'], 14: ['History analysis', 'gold-bg'], 16: ['Calculus quiz', 'blue-bg'], 18: ['English seminar', 'orange-bg'], 21: ['Silk Roads due', 'gold-bg'], 30: ['First quarter ending', 'event-bg'] },
+  10: { 11: ['Veterans Day — No school', 'event-bg'] }
+};
 const grid = document.querySelector('#calendarGrid');
 const calendarMonth = document.querySelector('#calendarMonth');
-const calendarLegend = document.querySelector('#calendarLegend');
-
 const todayDate = new Date();
 const currentMonthIndex = todayDate.getMonth();
 const currentDay = todayDate.getDate();
 const currentYear = todayDate.getFullYear();
-
 let displayedMonth = currentMonthIndex;
 let displayedYear = currentYear;
-
-const calendarColors = [
-  { bg: 'blue-bg', line: 'blue-line' },
-  { bg: 'purple-bg', line: 'purple-line' },
-  { bg: 'orange-bg', line: 'orange-line' },
-  { bg: 'gold-bg', line: 'gold-line' }
-];
-
-function getEnrolledClassesForCalendar() {
-  return classes.filter(c => enrolledClassIds.has(c.id));
-}
-
-function getClassColor(classId) {
-  const enrolledClasses = getEnrolledClassesForCalendar();
-  const index = enrolledClasses.findIndex(c => c.id === classId);
-
-  if (index === -1) {
-    return calendarColors[0];
-  }
-
-  return calendarColors[index % calendarColors.length];
-}
-
-function renderCalendarLegend() {
-  const enrolledClasses = getEnrolledClassesForCalendar();
-
-  const classLegend = enrolledClasses.map((classItem, index) => {
-    const color = calendarColors[index % calendarColors.length];
-
-    return `
-      <span>
-        <i class="legend-dot ${color.bg}"></i>
-        ${escapeHtml(classItem.name)}
-      </span>
-    `;
-  }).join('');
-
-  calendarLegend.innerHTML =
-    classLegend +
-    `<span><i class="legend-dot event-bg"></i>Upcoming events</span>`;
-}
-
-function getCalendarAssignments(year, month) {
-  return assignments.filter(assignment => {
-    if (!assignment.enrolled || !assignment.dueDate) return false;
-
-    return (
-      assignment.dueDate.getFullYear() === year &&
-      assignment.dueDate.getMonth() === month
-    );
-  });
-}
-
-function getCalendarEvents(year, month) {
-  return calendarEvents.filter(event => {
-    const eventDate = new Date(event.event_date + 'T00:00:00');
-
-    return (
-      eventDate.getFullYear() === year &&
-      eventDate.getMonth() === month
-    );
-  });
-}
-
 function renderCalendar() {
   const year = displayedYear;
   const firstDay = new Date(year, displayedMonth, 1).getDay();
   const mondayFirstOffset = (firstDay + 6) % 7;
   const daysInMonth = new Date(year, displayedMonth + 1, 0).getDate();
   const totalCells = Math.ceil((mondayFirstOffset + daysInMonth) / 7) * 7;
-
-  calendarMonth.textContent = new Intl.DateTimeFormat('en-US', {
-    month: 'long',
-    year: 'numeric'
-  }).format(new Date(year, displayedMonth, 1));
-
-  renderCalendarLegend();
-
-  const monthAssignments = getCalendarAssignments(year, displayedMonth);
-  const monthEvents = getCalendarEvents(year, displayedMonth);
-
+  calendarMonth.textContent = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(new Date(year, displayedMonth, 1));
   grid.innerHTML = Array.from({ length: totalCells }, (_, index) => {
     const day = index - mondayFirstOffset + 1;
     const isCurrentMonth = day > 0 && day <= daysInMonth;
-
-    if (!isCurrentMonth) {
-      return `<div class="day empty-day"><span></span></div>`;
-    }
-
-    const isToday =
-      displayedMonth === currentMonthIndex &&
-      displayedYear === currentYear &&
-      day === currentDay;
-
-    const dayAssignments = monthAssignments.filter(assignment => {
-      return assignment.dueDate.getDate() === day;
-    });
-
-    const dayEvents = monthEvents.filter(event => {
-      const eventDate = new Date(event.event_date + 'T00:00:00');
-      return eventDate.getDate() === day;
-    });
-
-    const assignmentHtml = dayAssignments.map(assignment => {
-      const color = getClassColor(assignment.classId);
-
-      return `
-        <div class="calendar-event ${color.bg}" title="${escapeHtml(assignment.title)}">
-          ${escapeHtml(assignment.title)}
-        </div>
-      `;
-    }).join('');
-
-    const eventHtml = dayEvents.map(event => {
-      return `
-        <div class="calendar-event event-bg" title="${escapeHtml(event.description || event.title)}">
-          ${escapeHtml(event.title)}
-        </div>
-      `;
-    }).join('');
-
-    return `
-      <div class="day ${isToday ? 'today' : ''}">
-        <span>${day}</span>
-        ${assignmentHtml}
-        ${eventHtml}
-      </div>
-    `;
+    const event = isCurrentMonth ? events[displayedMonth]?.[day] : null;
+    const isToday = isCurrentMonth && displayedMonth === currentMonthIndex && displayedYear === currentYear && day === currentDay;
+    return `<div class="day ${isToday ? 'today' : ''} ${!isCurrentMonth ? 'empty-day' : ''}"><span>${isCurrentMonth ? day : ''}</span>${event ? `<div class="calendar-event ${event[1]}">${event[0]}</div>` : ''}</div>`;
   }).join('');
 }
-
 renderCalendar();
-
-document.querySelector('#previousMonth').addEventListener('click', () => {
-  if (displayedMonth === 0) {
-    displayedMonth = 11;
-    displayedYear--;
-  } else {
-    displayedMonth--;
-  }
-
-  renderCalendar();
-});
-
-document.querySelector('#nextMonth').addEventListener('click', () => {
-  if (displayedMonth === 11) {
-    displayedMonth = 0;
-    displayedYear++;
-  } else {
-    displayedMonth++;
-  }
-
-  renderCalendar();
-});
-
-document.querySelector('#todayButton').addEventListener('click', () => {
-  displayedMonth = currentMonthIndex;
-  displayedYear = currentYear;
-  renderCalendar();
-});
+document.querySelector('#previousMonth').addEventListener('click', () => { if (displayedMonth === 0) { displayedMonth = 11; displayedYear--; } else { displayedMonth--; } renderCalendar(); });
+document.querySelector('#nextMonth').addEventListener('click', () => { if (displayedMonth === 11) { displayedMonth = 0; displayedYear++; } else { displayedMonth++; } renderCalendar(); });
+document.querySelector('#todayButton').addEventListener('click', () => { displayedMonth = currentMonthIndex; displayedYear = currentYear; renderCalendar(); });
 
 const currentDate = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
 document.querySelector('#topbarDate').textContent = currentDate;
@@ -712,13 +558,7 @@ document.querySelector('#manageClassList').addEventListener('click', async event
 
 function populateHomeworkClassSelect() {
   const select = document.querySelector('#homeworkClassSelect');
-
-  select.innerHTML = classes.map(c => {
-    const className = escapeHtml(c.name);
-    const teacherName = escapeHtml(c.teacher || 'Teacher not specified');
-
-    return `<option value="${c.id}">${className} (${teacherName})</option>`;
-  }).join('') || '<option value="">Add a class first</option>';
+  select.innerHTML = classes.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('') || '<option value="">Add a class first</option>';
 }
 
 document.querySelector('#postHomeworkButton').addEventListener('click', async () => {
@@ -810,144 +650,17 @@ document.querySelector('#manageHomeworkList').addEventListener('click', async ev
   }
 });
 
-
-// ============================================
-// Moderator calendar events
-// ============================================
-async function loadCalendarEvents() {
-  const { data, error } = await db
-    .from('calendar_events')
-    .select('*')
-    .order('event_date', { ascending: true });
-
-  if (error) {
-    calendarEvents = [];
-    return;
-  }
-
-  calendarEvents = data || [];
-}
-
-function renderManageEvents() {
-  const container = document.querySelector('#manageEventList');
-
-  if (!container) return;
-
-  const upcomingEvents = calendarEvents
-    .filter(event => event.event_date >= new Date().toISOString().slice(0, 10))
-    .sort((a, b) => a.event_date.localeCompare(b.event_date));
-
-  if (!upcomingEvents.length) {
-    container.innerHTML = '<p class="empty-homework">No upcoming events yet.</p>';
-    return;
-  }
-
-  container.innerHTML = upcomingEvents.map(event => {
-    const date = new Date(event.event_date + 'T00:00:00');
-
-    const formattedDate = new Intl.DateTimeFormat('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    }).format(date);
-
-    return `
-      <div class="manage-homework-row" data-id="${event.id}">
-        <div>
-          <span class="course-tag gold">EVENT</span>
-          <b>${escapeHtml(event.title)}</b>
-          <p>${escapeHtml(event.description || 'No description')}</p>
-          <small>${escapeHtml(formattedDate)}</small>
-        </div>
-
-        <div class="correction-actions">
-          <button class="reject delete-calendar-event" data-id="${event.id}">
-            Delete
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-document.querySelector('#addEventButton')?.addEventListener('click', async () => {
-  const title = document.querySelector('#newEventTitle').value.trim();
-  const event_date = document.querySelector('#newEventDate').value;
-  const description = document.querySelector('#newEventDescription').value.trim();
-
-  if (!title || !event_date) {
-    return toast('Please enter an event title and date.');
-  }
-
-  const { error } = await db
-    .from('calendar_events')
-    .insert({
-      title,
-      event_date,
-      description: description || null,
-      created_by: currentUser.id
-    });
-
-  if (error) {
-    return toast('Could not add event: ' + error.message);
-  }
-
-  document.querySelector('#newEventTitle').value = '';
-  document.querySelector('#newEventDate').value = '';
-  document.querySelector('#newEventDescription').value = '';
-
-  await loadCalendarEvents();
-
-  renderManageEvents();
-  renderCalendar();
-
-  toast('Event added to the calendar.');
-});
-
-document.querySelector('#manageEventList')?.addEventListener('click', async event => {
-  const button = event.target.closest('.delete-calendar-event');
-
-  if (!button) return;
-
-  if (!window.confirm('Delete this calendar event? This cannot be undone.')) {
-    return;
-  }
-
-  const { error } = await db
-    .from('calendar_events')
-    .delete()
-    .eq('id', button.dataset.id);
-
-  if (error) {
-    return toast('Could not delete event: ' + error.message);
-  }
-
-  await loadCalendarEvents();
-
-  renderManageEvents();
-  renderCalendar();
-
-  toast('Event deleted.');
-});
-
 // ============================================
 // Your schedule (enrollments) — controls which classes count toward "Your assignments"
 // ============================================
 function renderSchedule() {
   const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
   const list = document.querySelector('#scheduleList');
-
-  list.innerHTML = enrolledClasses.length
-    ? enrolledClasses.map(c => `<div class="class-setting"><span class="subject-dot ${c.subject_code}">${assignmentIcon(c.subject_code)}</span><div><b>${escapeHtml(c.name)}</b><p>${escapeHtml(c.teacher)}</p></div><button class="remove-schedule-class" data-id="${c.id}">Remove</button></div>`).join('')
-    : '<p class="empty-homework">You haven\'t added any classes yet.</p>';
+  list.innerHTML = enrolledClasses.length ? enrolledClasses.map(c => `<div class="class-setting"><span class="subject-dot ${c.subject_code}">${assignmentIcon(c.subject_code)}</span><div><b>${escapeHtml(c.name)}</b><p>${escapeHtml(c.teacher)}</p></div><button class="remove-schedule-class" data-id="${c.id}">Remove</button></div>`).join('') : '<p class="empty-homework">You haven\'t added any classes yet.</p>';
 
   const notEnrolled = classes.filter(c => !enrolledClassIds.has(c.id));
   const select = document.querySelector('#addScheduleClass');
-
-  select.innerHTML = notEnrolled.length
-    ? notEnrolled.map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.teacher || 'Teacher not specified')})</option>`).join('')
-    : '<option value="">No more classes to add</option>';
+  select.innerHTML = notEnrolled.length ? notEnrolled.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('') : '<option value="">No more classes to add</option>';
 }
 
 document.querySelector('#addScheduleButton').addEventListener('click', async () => {
