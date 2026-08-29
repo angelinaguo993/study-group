@@ -241,6 +241,7 @@ function updateFilterCounts() {
     all: assignments.length
   };
   document.querySelectorAll('.filter').forEach(button => { button.querySelector('b').textContent = counts[button.dataset.filter]; });
+  document.querySelector('#homeworkNavCount').textContent = counts.yours;
 }
 
 function renderHomework() {
