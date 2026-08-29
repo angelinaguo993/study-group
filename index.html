@@ -56,8 +56,37 @@
 
         <section id="homework" class="view"><div class="page-title"><div><p class="eyebrow">YOUR CLASSES</p><h1>Homework</h1><p class="subtitle">Everything assigned to your current schedule.</p></div><button class="primary-button" id="requestEdit">Request a correction</button></div><div class="filter-row"><button class="filter active" data-filter="yours">Your assignments <b></b></button><button class="filter" data-filter="week">This week <b></b></button><button class="filter" data-filter="completed">Completed <b></b></button><button class="filter" data-filter="all">All assignments <b></b></button><select id="courseFilter" aria-label="Filter course"><option>All classes</option><option>AP Calculus AB</option><option>English 10</option></select></div><div class="homework-list" id="homeworkList"></div></section>
 
-        <section id="calendar" class="view"><div class="page-title"><div><h1>Your calendar</h1><p class="subtitle">Deadlines, assessments, and upcoming events.</p></div><div class="calendar-controls"><div class="calendar-nav"><button id="previousMonth" aria-label="Previous month">←</button><button id="todayButton">Today</button><button id="nextMonth" aria-label="Next month">→</button></div><p class="eyebrow" id="calendarMonth"></p></div></div><div class="calendar-wrap"><div class="calendar-weekdays"><b>Mon</b><b>Tue</b><b>Wed</b><b>Thu</b><b>Fri</b><b>Sat</b><b>Sun</b></div><div class="calendar-grid" id="calendarGrid"></div></div><div class="legend"><span><i class="legend-dot blue-bg"></i>AP Calculus</span><span><i class="legend-dot purple-bg"></i>Chemistry</span><span><i class="legend-dot orange-bg"></i>English</span><span><i class="legend-dot gold-bg"></i>World History</span><span><i class="legend-dot event-bg"></i>Upcoming events</span></div></section>
+        <section id="calendar" class="view">
+          <div class="page-title">
+            <div>
+              <h1>Your calendar</h1>
+              <p class="subtitle">Deadlines, assessments, and upcoming events.</p>
+            </div>
+            <div class="calendar-controls">
+              <div class="calendar-nav">
+                <button id="previousMonth" aria-label="Previous month">←</button>
+                <button id="todayButton">Today</button>
+                <button id="nextMonth" aria-label="Next month">→</button>
+              </div>
+              <p class="eyebrow" id="calendarMonth"></p>
+            </div>
+          </div>
 
+          <div class="calendar-wrap">
+            <div class="calendar-weekdays">
+              <b>Mon</b>
+              <b>Tue</b>
+              <b>Wed</b>
+              <b>Thu</b>
+              <b>Fri</b>
+              <b>Sat</b>
+              <b>Sun</b>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </div>
+
+          <div class="legend" id="calendarLegend"></div>
+        </section>
         <section id="resources" class="view"><div class="page-title"><div><p class="eyebrow">STUDY TOGETHER</p><h1>Study resources</h1><p class="subtitle">An accessible collection of study resources.</p></div><button class="primary-button" id="shareResource">+ Share a resource</button></div><div class="resource-feature"><div><span class="resource-feature-label purple">pinned resources</span><h2>AP & IB Exam Prep</h2><p>study guides, practice tests, and notes for different AP &amp; IB subjects.</p><button class="dark-button" type="button" data-resource-collection="AP">Explore -></button></div><div class="feature-shapes"><span>AP</span><i></i><b>IB</b></div></div><div class="resource-tabs" aria-label="Resource collections"><button class="active" type="button" data-resource-collection="all">All resources</button><button type="button" data-resource-collection="AP">AP</button><button type="button" data-resource-collection="IB">IB</button><button type="button" data-resource-collection="SAT">SAT</button><button type="button" data-resource-collection="ACT">ACT</button><button type="button" data-resource-collection="elective">Elective</button><button type="button" data-resource-collection="other">Other</button><select id="resourceSubjectFilter" aria-label="Filter resources by subject"><option value="all">All subjects</option></select></div><div class="resource-grid" id="resourceGrid"></div></section>
 
         <section id="settings" class="view"><div class="page-title"><div><p class="eyebrow">PERSONALIZATION</p><h1>Your schedule</h1><p class="subtitle">Only classes on this list appear in your feed.</p></div></div><div class="settings-card"><h2>Current classes</h2><div id="scheduleList"></div><div class="manage-form inline-form"><select id="addScheduleClass"></select><button class="add-class" id="addScheduleButton">+ Add another class</button></div></div><div class="settings-card" id="modRequestCard"><h2>Moderator access</h2><p class="subtitle" id="modRequestStatus">Moderators can post homework, manage classes, and review corrections.</p><div class="manage-form" id="modRequestForm"><label>Why do you want mod access? (optional)<textarea id="modRequestMessage" placeholder="e.g., I'm the class rep for AP Bio"></textarea></label><button class="primary-button" id="requestModButton">Request mod access</button></div></div></section>
@@ -89,6 +118,32 @@
             <h2>All homework</h2>
             <div id="manageHomeworkList"></div>
           </div>
+
+          <div class="settings-card manage-card">
+  <h2>Upcoming events</h2>
+  <p class="subtitle">Add important school events that should appear on everyone's calendar.</p>
+
+  <div class="manage-form">
+    <label>
+      Event title
+      <input id="newEventTitle" type="text" placeholder="e.g., Picture Day">
+    </label>
+
+    <label>
+      Date
+      <input id="newEventDate" type="date">
+    </label>
+
+    <label>
+      Description
+      <textarea id="newEventDescription" placeholder="e.g., Bring your photo order form."></textarea>
+    </label>
+
+    <button class="primary-button" id="addEventButton">+ Add event</button>
+  </div>
+
+  <div id="manageEventList"></div>
+</div>
 
           <div class="settings-card manage-card">
             <h2>Mod requests</h2>
