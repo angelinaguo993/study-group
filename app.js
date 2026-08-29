@@ -661,11 +661,17 @@ document.querySelector('#manageHomeworkList').addEventListener('click', async ev
 function renderSchedule() {
   const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
   const list = document.querySelector('#scheduleList');
-  list.innerHTML = enrolledClasses.length ? enrolledClasses.map(c => `<div class="class-setting"><span class="subject-dot ${c.subject_code}">${assignmentIcon(c.subject_code)}</span><div><b>${escapeHtml(c.name)}</b><p>${escapeHtml(c.teacher)}</p></div><button class="remove-schedule-class" data-id="${c.id}">Remove</button></div>`).join('') : '<p class="empty-homework">You haven\'t added any classes yet.</p>';
+
+  list.innerHTML = enrolledClasses.length
+    ? enrolledClasses.map(c => `<div class="class-setting"><span class="subject-dot ${c.subject_code}">${assignmentIcon(c.subject_code)}</span><div><b>${escapeHtml(c.name)}</b><p>${escapeHtml(c.teacher)}</p></div><button class="remove-schedule-class" data-id="${c.id}">Remove</button></div>`).join('')
+    : '<p class="empty-homework">You haven\'t added any classes yet.</p>';
 
   const notEnrolled = classes.filter(c => !enrolledClassIds.has(c.id));
   const select = document.querySelector('#addScheduleClass');
-  select.innerHTML = notEnrolled.length ? notEnrolled.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('') : '<option value="">No more classes to add</option>';
+
+  select.innerHTML = notEnrolled.length
+    ? notEnrolled.map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.teacher || 'Teacher not specified')})</option>`).join('')
+    : '<option value="">No more classes to add</option>';
 }
 
 document.querySelector('#addScheduleButton').addEventListener('click', async () => {
