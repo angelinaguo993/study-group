@@ -530,7 +530,7 @@ function openModal(title, text, type = 'correction') {
   document.querySelector('#submitModal').textContent = type === 'resource' ? 'Share resource' : type === 'discussion' ? 'Create post' : 'Send request';
   modal.classList.add('open');
 }
-document.querySelector('#requestEdit').addEventListener('click', ()=>openModal('Request a correction', "Tell the moderators what needs updating. They'll review it shortly."));
+document.querySelector('#requestEdit').addEventListener('click', ()=>openModal('Request a correction', "Tell the moderators if there are any issues or if anything needs updating. They'll review it shortly."));
 document.querySelector('#shareResource').addEventListener('click', ()=>openModal('Share a resource', 'Help your classmates by sharing a link, guide, or study material.', 'resource'));
 const addDiscussion = document.querySelector('.dots');
 addDiscussion.textContent = '+';
