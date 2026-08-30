@@ -70,4 +70,13 @@ body{font-size:16px}.subtitle{font-size:16px}.soft-button,.primary-button,.dark-
 .manage-homework-row.editing{display:block}
 .manage-homework-row.editing .manage-form{margin-top:0}
 
+.manage-columns{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px}
+.manage-col{display:flex;flex-direction:column;gap:24px;min-width:0}
+.manage-col .manage-card{max-width:none;margin-bottom:0}
+@media(max-width:900px){.manage-columns{grid-template-columns:1fr}}
+
+.assignment-grid .empty-homework{grid-column:1/-1}
+
+.resource-card .mod-delete{z-index:1}
+
 @media(max-width:600px){.calendar-controls{text-align:left}.discussion-feed{max-height:440px}}

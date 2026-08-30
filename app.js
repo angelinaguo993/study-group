@@ -115,16 +115,17 @@ async function initializeApp() {
 
   await loadEnrollments();
   await loadClassesAndHomework();
+  await loadCalendarEvents();
   renderHomework();
   renderSchedule();
   renderResources();
+  renderAgendaList();
   applyModDiscussionControls();
   await refreshModRequestUI();
   if (currentProfile.role === 'mod') {
     renderManageClasses();
     populateHomeworkClassSelect();
     renderManageHomework();
-    await loadCalendarEvents();
     renderManageEvents();
     await loadCorrections();
     await loadModRequests();
@@ -209,10 +210,10 @@ function updateDashboardAssignments() {
     focusButton.innerHTML = '<span>✓</span> Mark complete';
   }
 
-  dashboardAssignments.innerHTML = overviewAssignments.map(a => {
+  dashboardAssignments.innerHTML = overviewAssignments.length ? overviewAssignments.map(a => {
     const initials = (a.teacher || '').split(' ').map(part => part[0]).join('').slice(0, 2);
     return `<article class="assignment-card" data-id="${a.id}"><div class="card-meta"><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><span>Due ${escapeHtml(a.due)}</span></div><h3>${escapeHtml(a.title)}</h3><p>${escapeHtml(a.description)}</p><div class="card-bottom"><span class="teacher"><i class="mini-avatar">${escapeHtml(initials)}</i> ${escapeHtml(a.teacher)}</span><button class="circle-check dashboard-check" aria-label="Complete assignment">✓</button></div></article>`;
-  }).join('');
+  }).join('') : '<p class="empty-homework">Nothing to show here right now — you\'re all caught up!</p>';
 
   const remaining = upcoming.length;
   document.querySelector('#assignmentCount').textContent = `${remaining} assignment${remaining === 1 ? '' : 's'}`;
@@ -477,22 +478,24 @@ function toast(message) { const t = document.querySelector('#toast'); t.textCont
 const resourceGrid = document.querySelector('#resourceGrid');
 const resourceSubjectFilter = document.querySelector('#resourceSubjectFilter');
 function renderResources() {
-  const subjects = [...new Set(resources.map(resource => resource.subject))];
+  const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
   const selectedSubject = resourceSubjectFilter.value;
-  resourceSubjectFilter.innerHTML = `<option value="all">All subjects</option>${subjects.map(subject => `<option value="${subject}">${subject}</option>`).join('')}`;
-  resourceSubjectFilter.value = subjects.includes(selectedSubject) ? selectedSubject : 'all';
+  resourceSubjectFilter.innerHTML = `<option value="all">All subjects</option>${enrolledClasses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}`;
+  resourceSubjectFilter.value = enrolledClasses.some(c => c.id === selectedSubject) ? selectedSubject : 'all';
   const visibleResources = resources.filter(resource =>
     (activeResourceCollection === 'all' || resource.collection === activeResourceCollection) &&
-    (activeResourceSubject === 'all' || resource.subject === activeResourceSubject)
+    (activeResourceSubject === 'all' || resource.classId === activeResourceSubject)
   );
   resourceGrid.innerHTML = visibleResources.length ? visibleResources.map(resource => {
     const safeLink = /^https?:\/\//i.test(resource.link || '') ? resource.link : null;
-    return `<article class="resource-card" data-index="${resources.indexOf(resource)}"><div class="resource-icon ${resource.color}">${resource.icon}</div><div><span class="resource-type">${escapeHtml(resource.type).toUpperCase()} · ${escapeHtml(resource.subject).toUpperCase()}</span><h3>${escapeHtml(resource.title)}</h3><p>Shared by ${escapeHtml(resource.author)}</p>${safeLink ? `<a class="resource-link" href="${escapeHtml(safeLink)}" target="_blank" rel="noopener noreferrer">Open resource →</a>` : ''}</div><button aria-label="Save ${escapeHtml(resource.title)}">⌑</button>${currentProfile?.role === 'mod' ? `<button class="mod-delete" aria-label="Delete resource">🗑</button>` : ''}</article>`;
+    const subjectLabel = resource.className || 'General';
+    return `<article class="resource-card" data-index="${resources.indexOf(resource)}"><div class="resource-icon ${resource.color}">${resource.icon}</div><div><span class="resource-type">${escapeHtml(resource.type).toUpperCase()} · ${escapeHtml(subjectLabel).toUpperCase()}</span><h3>${escapeHtml(resource.title)}</h3><p>Shared by ${escapeHtml(resource.author)}</p>${safeLink ? `<a class="resource-link" href="${escapeHtml(safeLink)}" target="_blank" rel="noopener noreferrer">Open resource →</a>` : ''}</div><button aria-label="Save ${escapeHtml(resource.title)}">⌑</button>${currentProfile?.role === 'mod' ? `<button class="mod-delete" aria-label="Delete resource">🗑</button>` : ''}</article>`;
   }).join('') : '<p class="empty-resources">No resources in this collection yet.</p>';
 }
 resourceGrid.addEventListener('click', event => {
   const button = event.target.closest('.mod-delete');
   if (!button) return;
+  if (!window.confirm('Are you sure you want to delete this resource?')) return;
   const card = button.closest('.resource-card');
   const index = Number(card.dataset.index);
   resources.splice(index, 1);
@@ -520,7 +523,9 @@ function openModal(title, text, type = 'correction') {
   document.querySelector('#modalText').textContent = text;
   modalEyebrow.hidden = type === 'correction';
   if (type === 'resource') {
-    modalFields.innerHTML = '<label>Title<input id="resourceTitle" type="text" placeholder="e.g., Unit 3 study guide" required></label><label>Category<select id="resourceCategory" required><option value="notes">Notes</option><option value="practice">Practice</option><option value="study guide">Study guide</option><option value="other">Other</option></select></label><label>Collection<select id="resourceCollection" required><option value="AP">AP</option><option value="IB">IB</option><option value="SAT">SAT</option><option value="ACT">ACT</option><option value="elective">Elective</option><option value="other">Other</option></select></label><label>Link<input id="resourceLink" type="url" placeholder="https://" required></label><label>Description<textarea id="resourceDescription" placeholder="What is this material good for?" required></textarea></label>';
+    const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
+    const classOptions = enrolledClasses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    modalFields.innerHTML = `<label>Title<input id="resourceTitle" type="text" placeholder="e.g., Unit 3 study guide" required></label><label>Class<select id="resourceClass">${classOptions || '<option value="">No classes in your schedule yet</option>'}</select></label><label>Category<select id="resourceCategory" required><option value="notes">Notes</option><option value="practice">Practice</option><option value="study guide">Study guide</option><option value="other">Other</option></select></label><label>Collection<select id="resourceCollection" required><option value="AP">AP</option><option value="IB">IB</option><option value="SAT">SAT</option><option value="ACT">ACT</option><option value="elective">Elective</option><option value="other">Other</option></select></label><label>Link<input id="resourceLink" type="url" placeholder="https://" required></label><label>Description<textarea id="resourceDescription" placeholder="What is this material good for?" required></textarea></label>`;
   } else if (type === 'discussion') {
     modalFields.innerHTML = '<label>Title of post<input id="discussionTitle" type="text" placeholder="What do you want to discuss?" required></label><label>Description of post<textarea id="discussionDescription" placeholder="Add context or a question for your classmates." required></textarea></label>';
   } else {
@@ -530,7 +535,7 @@ function openModal(title, text, type = 'correction') {
   document.querySelector('#submitModal').textContent = type === 'resource' ? 'Share resource' : type === 'discussion' ? 'Create post' : 'Send request';
   modal.classList.add('open');
 }
-document.querySelector('#requestEdit').addEventListener('click', ()=>openModal('Request a correction', "Tell the moderators if there are any issues or if anything needs updating. They'll review it shortly."));
+document.querySelector('#requestEdit').addEventListener('click', ()=>openModal('Request a correction', "Tell the moderators what needs updating. They'll review it shortly."));
 document.querySelector('#shareResource').addEventListener('click', ()=>openModal('Share a resource', 'Help your classmates by sharing a link, guide, or study material.', 'resource'));
 const addDiscussion = document.querySelector('.dots');
 addDiscussion.textContent = '+';
@@ -542,12 +547,14 @@ modal.addEventListener('click', e=> { if(e.target === modal) modal.classList.rem
 document.querySelector('#submitModal').addEventListener('click', async () => {
   if (modalType === 'resource') {
     const title = document.querySelector('#resourceTitle').value.trim();
+    const classId = document.querySelector('#resourceClass').value;
+    const className = classes.find(c => c.id === classId)?.name || '';
     const category = document.querySelector('#resourceCategory').value;
     const collection = document.querySelector('#resourceCollection').value;
     const link = document.querySelector('#resourceLink').value.trim();
     const description = document.querySelector('#resourceDescription').value.trim();
     if (!title || !link || !description) return toast('Please complete all three resource fields.');
-    resources.unshift({ title, type: category, subject: collection, collection, author: currentProfile.full_name, icon: '↗', color: 'green-paper', link, description });
+    resources.unshift({ title, type: category, classId: classId || null, className, collection, author: currentProfile.full_name, icon: '↗', color: 'green-paper', link, description });
     activeResourceCollection = collection;
     activeResourceSubject = 'all';
     document.querySelectorAll('.resource-tabs [data-resource-collection]').forEach(tab => tab.classList.toggle('active', tab.dataset.resourceCollection === collection));
@@ -626,11 +633,13 @@ document.querySelectorAll('.community-post').forEach(setupDiscussionPost);
 document.querySelector('.discussion-feed').addEventListener('click', event => {
   const deletePost = event.target.closest('.mod-delete-post');
   if (deletePost) {
+    if (!window.confirm('Are you sure you want to delete this discussion post?')) return;
     deletePost.closest('.community-post').remove();
     return toast('Post removed.');
   }
   const deleteReply = event.target.closest('.reply-delete');
   if (deleteReply) {
+    if (!window.confirm('Are you sure you want to delete this reply?')) return;
     const post = deleteReply.closest('.community-post');
     deleteReply.closest('p').remove();
     const toggle = post.querySelector('.replies-toggle span');
@@ -829,6 +838,28 @@ async function loadCalendarEvents() {
   calendarEvents = data || [];
 }
 
+function renderAgendaList() {
+  const container = document.querySelector('#agendaList');
+  if (!container) return;
+
+  const upcomingEvents = calendarEvents
+    .filter(event => event.event_date >= new Date().toISOString().slice(0, 10))
+    .sort((a, b) => a.event_date.localeCompare(b.event_date))
+    .slice(0, 4);
+
+  if (!upcomingEvents.length) {
+    container.innerHTML = '<p class="empty-homework">No upcoming events right now.</p>';
+    return;
+  }
+
+  const lineColors = ['blue-line', 'purple-line', 'orange-line'];
+  container.innerHTML = upcomingEvents.map((event, index) => {
+    const date = new Date(event.event_date + 'T00:00:00');
+    const short = new Intl.DateTimeFormat('en-US', { month: 'numeric', day: 'numeric' }).format(date);
+    return `<div class="agenda-item"><time>${escapeHtml(short)}</time><span class="agenda-line ${lineColors[index % lineColors.length]}"></span><div><b>${escapeHtml(event.title)}</b><p>${escapeHtml(event.description || '')}</p></div></div>`;
+  }).join('');
+}
+
 function renderManageEvents() {
   const container = document.querySelector('#manageEventList');
 
@@ -901,6 +932,7 @@ document.querySelector('#addEventButton')?.addEventListener('click', async () =>
   await loadCalendarEvents();
 
   renderManageEvents();
+  renderAgendaList();
   renderCalendar();
 
   toast('Event added to the calendar.');
@@ -927,6 +959,7 @@ document.querySelector('#manageEventList')?.addEventListener('click', async even
   await loadCalendarEvents();
 
   renderManageEvents();
+  renderAgendaList();
   renderCalendar();
 
   toast('Event deleted.');
