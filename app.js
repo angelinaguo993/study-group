@@ -472,7 +472,127 @@ const currentDate = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: '
 document.querySelector('#topbarDate').textContent = currentDate;
 document.querySelector('#dashboardDate').textContent = currentDate;
 
-document.querySelectorAll('[data-view]').forEach(link => link.addEventListener('click', e => { e.preventDefault(); const view = link.dataset.view; document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view')); document.querySelector('#' + view).classList.add('active-view'); document.querySelectorAll('.nav-link').forEach(n => n.classList.toggle('active', n.dataset.view === view)); document.querySelector('#crumb').innerHTML = `${view === 'dashboard' ? 'Dashboard' : view[0].toUpperCase() + view.slice(1)} <span>/</span> ${view === 'dashboard' ? currentDate : 'Interlake High School'}`; window.scrollTo(0,0); if (view === 'manage' && currentProfile?.role === 'mod') { loadCorrections(); loadModRequests(); } }));
+// ============================================
+// Navigation + URL routing
+// ============================================
+
+const BASE_PATH = '/study-group';
+
+const validViews = [
+  'dashboard',
+  'homework',
+  'calendar',
+  'resources',
+  'manage',
+  'settings'
+];
+
+function getViewFromPath() {
+  const path = window.location.pathname.replace(/\/+$/, '');
+
+  if (path === '' || path === BASE_PATH) {
+    const savedRoute = sessionStorage.getItem('study-group-route');
+
+    if (savedRoute) {
+      sessionStorage.removeItem('study-group-route');
+
+      const savedView = savedRoute.replace(/^\/+/, '');
+
+      if (validViews.includes(savedView)) {
+        return savedView;
+      }
+    }
+
+    return 'dashboard';
+  }
+
+  const prefix = `${BASE_PATH}/`;
+
+  if (path.startsWith(prefix)) {
+    const view = path.slice(prefix.length).split('/')[0];
+
+    if (validViews.includes(view)) {
+      return view;
+    }
+  }
+
+  return 'dashboard';
+}
+
+function updateUrl(view, replace = false) {
+  const path = view === 'dashboard'
+    ? `${BASE_PATH}/`
+    : `${BASE_PATH}/${view}`;
+
+  if (window.location.pathname !== path) {
+    if (replace) {
+      window.history.replaceState({ view }, '', path);
+    } else {
+      window.history.pushState({ view }, '', path);
+    }
+  }
+}
+
+function showView(view, updateHistory = true) {
+  if (!validViews.includes(view)) {
+    view = 'dashboard';
+  }
+
+  document.querySelectorAll('.view').forEach(v => {
+    v.classList.remove('active-view');
+  });
+
+  const targetView = document.querySelector(`#${view}`);
+
+  if (!targetView) {
+    console.error(`View "${view}" was not found.`);
+    return;
+  }
+
+  targetView.classList.add('active-view');
+
+  document.querySelectorAll('.nav-link').forEach(nav => {
+    nav.classList.toggle('active', nav.dataset.view === view);
+  });
+
+  document.querySelector('#crumb').innerHTML =
+    `${view === 'dashboard' ? 'Dashboard' : view[0].toUpperCase() + view.slice(1)}
+    <span>/</span>
+    ${view === 'dashboard' ? currentDate : 'Interlake High School'}`;
+
+  if (updateHistory) {
+    updateUrl(view);
+  }
+
+  window.scrollTo(0, 0);
+
+  if (view === 'manage' && currentProfile?.role === 'mod') {
+    loadCorrections();
+    loadModRequests();
+  }
+}
+
+// Handle clicks on navigation links
+document.querySelectorAll('[data-view]').forEach(link => {
+  link.addEventListener('click', event => {
+    event.preventDefault();
+
+    const view = link.dataset.view;
+
+    showView(view);
+  });
+});
+
+// Handle browser Back / Forward buttons
+window.addEventListener('popstate', () => {
+  showView(getViewFromPath(), false);
+});
+
+// Start on the correct URL
+const initialView = getViewFromPath();
+showView(initialView, false);
+updateUrl(initialView, true); // sync the address bar (replace, not push, so back button stays clean)
+
 function toast(message) { const t = document.querySelector('#toast'); t.textContent = message; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2600); }
 
 const resourceGrid = document.querySelector('#resourceGrid');

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudyGroup</title>
+
+  <script>
+    const path = window.location.pathname;
+    const base = '/study-group';
+
+    const validRoutes = [
+      '/homework',
+      '/calendar',
+      '/resources',
+      '/manage',
+      '/settings'
+    ];
+
+    const route = path.startsWith(base)
+      ? path.slice(base.length).replace(/\/+$/, '')
+      : '';
+
+    if (validRoutes.includes(route)) {
+      sessionStorage.setItem(
+        'study-group-route',
+        route
+      );
+    }
+
+    window.location.replace(
+      base + '/'
+    );
+  </script>
+</head>
+
+<body>
+  <p>Loading StudyGroup...</p>
+</body>
+</html>
