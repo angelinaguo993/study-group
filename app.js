@@ -1351,7 +1351,7 @@ async function loadDiscussionPosts() {
     const isMod = authorRole === 'mod';
     
     // Create MOD badge HTML if user is a moderator
-    const modBadgeHtml = isMod ? `<span style="background: var(--green, #ecb2d6); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: bold; text-transform: uppercase; display: inline-block; vertical-align: middle;">MOD</span>` : '';
+    const modBadgeHtml = isMod ? `<span style="background: var(--pink, #ecb2d6); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: bold; text-transform: uppercase; display: inline-block; vertical-align: middle;">MOD</span>` : '';
 
     const className = post.classes?.name;
     const subjectHtml = className ? `<span class="course-tag blue" style="margin-bottom: 8px; display: inline-block;">${escapeHtml(className)}</span>` : '';
@@ -1369,7 +1369,7 @@ async function loadDiscussionPosts() {
     const repliesHtml = repliesList.map(r => {
       const replyAuthorRole = r.profiles?.role;
       const replyIsMod = replyAuthorRole === 'mod';
-      const replyModBadge = replyIsMod ? `<span style="background: var(--green, #22c55e); color: white; font-size: 9px; padding: 1px 5px; border-radius: 3px; margin-left: 4px; font-weight: bold;">MOD</span>` : '';
+      const replyModBadge = replyIsMod ? `<span style="background: var(--pink, #ecb2d6); color: white; font-size: 9px; padding: 1px 5px; border-radius: 3px; margin-left: 4px; font-weight: bold;">MOD</span>` : '';
 
       return `
         <p data-reply-id="${r.id}">
