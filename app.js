@@ -13,6 +13,14 @@ let corrections = [];
 let calendarEvents = [];
 let enrolledClassIds = new Set();
 
+const iconPool = ['✦', '▤', '▰', '∑', '◌', '✎', '⚗', 'A', '◆', '↗', '★', '❖'];
+const colorPool = ['green-paper', 'purple-paper', 'orange-paper'];
+const subjectDotColors = ['math', 'chem', 'history', 'spanish', 'blue', 'purple', 'orange', 'gold'];
+
+function getRandomItem(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -598,31 +606,56 @@ function toast(message) { const t = document.querySelector('#toast'); t.textCont
 
 const resourceGrid = document.querySelector('#resourceGrid');
 const resourceSubjectFilter = document.querySelector('#resourceSubjectFilter');
+
 function renderResources() {
   const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
   const selectedSubject = resourceSubjectFilter.value;
   resourceSubjectFilter.innerHTML = `<option value="all">All subjects</option>${enrolledClasses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}`;
   resourceSubjectFilter.value = enrolledClasses.some(c => c.id === selectedSubject) ? selectedSubject : 'all';
+  
   const visibleResources = resources.filter(resource =>
     (activeResourceCollection === 'all' || resource.collection === activeResourceCollection) &&
     (activeResourceSubject === 'all' || resource.classId === activeResourceSubject)
   );
+
   resourceGrid.innerHTML = visibleResources.length ? visibleResources.map(resource => {
-    const safeLink = /^https?:\/\//i.test(resource.link || '') ? resource.link : null;
+    // Assign random icon and color if not already assigned
+    if (!resource.icon) resource.icon = getRandomItem(iconPool);
+    if (!resource.color) resource.color = getRandomItem(colorPool);
+
     const subjectLabel = resource.className || 'General';
-    return `<article class="resource-card" data-index="${resources.indexOf(resource)}"><div class="resource-icon ${resource.color}">${resource.icon}</div><div><span class="resource-type">${escapeHtml(resource.type).toUpperCase()} · ${escapeHtml(subjectLabel).toUpperCase()}</span><h3>${escapeHtml(resource.title)}</h3><p>Shared by ${escapeHtml(resource.author)}</p>${safeLink ? `<a class="resource-link" href="${escapeHtml(safeLink)}" target="_blank" rel="noopener noreferrer">Open resource →</a>` : ''}</div><button aria-label="Save ${escapeHtml(resource.title)}">⌑</button>${currentProfile?.role === 'mod' ? `<button class="mod-delete" aria-label="Delete resource">🗑</button>` : ''}</article>`;
+    return `<article class="resource-card clickable-resource-card" data-index="${resources.indexOf(resource)}"><div class="resource-icon ${resource.color}">${resource.icon}</div><div><span class="resource-type">${escapeHtml(resource.type).toUpperCase()} · ${escapeHtml(subjectLabel).toUpperCase()}</span><h3>${escapeHtml(resource.title)}</h3><p>Shared by ${escapeHtml(resource.author)}</p></div>${currentProfile?.role === 'mod' ? `<button class="mod-delete" aria-label="Delete resource">🗑</button>` : ''}</article>`;
   }).join('') : '<p class="empty-resources">No resources in this collection yet.</p>';
 }
+
 resourceGrid.addEventListener('click', event => {
-  const button = event.target.closest('.mod-delete');
-  if (!button) return;
-  if (!window.confirm('Are you sure you want to delete this resource?')) return;
-  const card = button.closest('.resource-card');
+  const deleteBtn = event.target.closest('.mod-delete');
+  if (deleteBtn) {
+    if (!window.confirm('Are you sure you want to delete this resource?')) return;
+    const card = deleteBtn.closest('.resource-card');
+    const index = Number(card.dataset.index);
+    resources.splice(index, 1);
+    renderResources();
+    toast('Resource removed.');
+    return;
+  }
+
+  const card = event.target.closest('.clickable-resource-card');
+  if (!card) return;
   const index = Number(card.dataset.index);
-  resources.splice(index, 1);
-  renderResources();
-  toast('Resource removed.');
+  const resource = resources[index];
+  if (!resource) return;
+
+  // Open popup modal showing details, description, and link
+  const safeLink = /^https?:\/\//i.test(resource.link || '') ? resource.link : '#';
+  openModal(
+    resource.title, 
+    `Shared by ${resource.author} · Type: ${resource.type.toUpperCase()}`, 
+    'resource-detail',
+    resource
+  );
 });
+
 document.querySelectorAll('[data-resource-collection]').forEach(button => button.addEventListener('click', () => {
   activeResourceCollection = button.dataset.resourceCollection;
   document.querySelectorAll('.resource-tabs [data-resource-collection]').forEach(tab => tab.classList.toggle('active', tab.dataset.resourceCollection === activeResourceCollection));
@@ -638,19 +671,32 @@ const modal = document.querySelector('#modal');
 const modalEyebrow = document.querySelector('#modalEyebrow');
 const modalFields = document.querySelector('#modalFields');
 let modalType = 'correction';
-function openModal(title, text, type = 'correction') {
+function openModal(title, text, type = 'correction', extraData = null) {
   modalType = type;
   document.querySelector('#modalTitle').textContent = title;
   document.querySelector('#modalText').textContent = text;
   modalEyebrow.hidden = type === 'correction';
+  
   if (type === 'resource') {
     const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
     const classOptions = enrolledClasses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
     modalFields.innerHTML = `<label>Title<input id="resourceTitle" type="text" placeholder="e.g., Unit 3 study guide" required></label><label>Class<select id="resourceClass">${classOptions || '<option value="">No classes in your schedule yet</option>'}</select></label><label>Category<select id="resourceCategory" required><option value="notes">Notes</option><option value="practice">Practice</option><option value="study guide">Study guide</option><option value="other">Other</option></select></label><label>Collection<select id="resourceCollection" required><option value="AP">AP</option><option value="IB">IB</option><option value="SAT">SAT</option><option value="ACT">ACT</option><option value="elective">Elective</option><option value="other">Other</option></select></label><label>Link<input id="resourceLink" type="url" placeholder="https://" required></label><label>Description<textarea id="resourceDescription" placeholder="What is this material good for?" required></textarea></label>`;
+    document.querySelector('#submitModal').textContent = 'Share resource';
+    document.querySelector('#submitModal').style.display = '';
+  } else if (type === 'resource-detail' && extraData) {
+    const safeLink = /^https?:\/\//i.test(extraData.link || '') ? extraData.link : '#';
+    modalFields.innerHTML = `
+      <div class="resource-detail-meta">
+        <p><b>Description:</b></p>
+        <p style="margin-top: 4px; margin-bottom: 16px; color: var(--text-muted);">${escapeHtml(extraData.description || 'No description provided.')}</p>
+        <p><b>Link:</b></p>
+        <a href="${escapeHtml(safeLink)}" target="_blank" rel="noopener noreferrer" class="text-link" style="display: inline-block; margin-top: 4px;">Open resource link ↗</a>
+      </div>
+    `;
+    document.querySelector('#submitModal').style.display = 'none'; // Hide submit button for viewing details
   } else if (type === 'discussion') {
     const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
-    const classOptions = enrolledClasses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
-
+    const classOptions = enrolledClasses.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
     modalFields.innerHTML = `
       <label>Title of post<input id="discussionTitle" type="text" placeholder="What do you want to discuss?" required></label>
       <label>Subject (optional)
@@ -661,13 +707,17 @@ function openModal(title, text, type = 'correction') {
       </label>
       <label>Description of post<textarea id="discussionDescription" placeholder="Add context or a question for your classmates." required></textarea></label>
     `;
+    document.querySelector('#submitModal').textContent = 'Create post';
+    document.querySelector('#submitModal').style.display = '';
   } else {
     const options = assignments.map(a => `<option value="${a.id}">${escapeHtml(a.course)} — ${escapeHtml(a.title)}</option>`).join('');
     modalFields.innerHTML = `<label>Which assignment?<select id="correctionHomework">${options || '<option value="">No homework posted yet</option>'}</select></label><label>What needs to change?<textarea id="correctionText" placeholder="Describe the issue or update…"></textarea></label>`;
+    document.querySelector('#submitModal').textContent = 'Send request';
+    document.querySelector('#submitModal').style.display = '';
   }
-  document.querySelector('#submitModal').textContent = type === 'resource' ? 'Share resource' : type === 'discussion' ? 'Create post' : 'Send request';
   modal.classList.add('open');
 }
+
 document.querySelector('#requestEdit').addEventListener('click', ()=>openModal('Request a correction', "Tell the moderators what needs updating. They'll review it shortly."));
 document.querySelector('#shareResource').addEventListener('click', ()=>openModal('Share a resource', 'Help your classmates by sharing a link, guide, or study material.', 'resource'));
 const addDiscussion = document.querySelector('.dots');
@@ -847,7 +897,19 @@ document.querySelector('.discussion-feed').addEventListener('submit', event => {
 
 function renderManageClasses() {
   const list = document.querySelector('#manageClassList');
-  list.innerHTML = classes.length ? classes.map(c => `<div class="class-setting"><span class="subject-dot ${c.subject_code}">${assignmentIcon(c.subject_code)}</span><div><b>${escapeHtml(c.name)}</b><p>${escapeHtml(c.teacher)}</p></div><button class="delete-class" data-id="${c.id}">Remove</button></div>`).join('') : '<p class="empty-homework">No classes yet — add one below.</p>';
+  list.innerHTML = classes.length ? classes.map(c => {
+    // Dynamically assign random style properties if missing
+    const randomIcon = getRandomItem(iconPool);
+    const randomDotColor = getRandomItem(subjectDotColors);
+
+    return `
+      <div class="class-setting">
+        <span class="subject-dot ${randomDotColor}">${randomIcon}</span>
+        <div><b>${escapeHtml(c.name)}</b><p>${escapeHtml(c.teacher)}</p></div>
+        <button class="delete-class" data-id="${c.id}">Remove</button>
+      </div>
+    `;
+  }).join('') : '<p class="empty-homework">No classes yet — add one below.</p>';
 }
 
 document.querySelector('#addClassButton').addEventListener('click', async () => {
