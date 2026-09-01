@@ -898,7 +898,7 @@ document.querySelector('.discussion-feed').addEventListener('click', async event
     await loadDiscussionPosts();
     return;
   }
-  
+
   const button = event.target.closest('.replies-toggle');
   if (!button) return;
   const replies = button.closest('.community-post').querySelector('.replies');
@@ -1340,13 +1340,19 @@ async function loadDiscussionPosts() {
   const feed = document.querySelector('.discussion-feed');
   const { data: posts, error } = await db
     .from('discussion_posts')
-    .select('*, profiles!discussion_posts_author_id_fkey(full_name), classes(name), discussion_replies(*, profiles(full_name)), discussion_likes(user_id)')
+    .select('*, profiles!discussion_posts_author_id_fkey(full_name, role), classes(name), discussion_replies(*, profiles(full_name, role)), discussion_likes(user_id)')
     .order('created_at', { ascending: false });
 
   if (error || !posts) return;
 
   feed.innerHTML = posts.map(post => {
     const authorName = post.profiles?.full_name || 'Student';
+    const authorRole = post.profiles?.role;
+    const isMod = authorRole === 'mod';
+    
+    // Create MOD badge HTML if user is a moderator
+    const modBadgeHtml = isMod ? `<span style="background: var(--green, #22c55e); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: bold; text-transform: uppercase; display: inline-block; vertical-align: middle;">MOD</span>` : '';
+
     const className = post.classes?.name;
     const subjectHtml = className ? `<span class="course-tag blue" style="margin-bottom: 8px; display: inline-block;">${escapeHtml(className)}</span>` : '';
     
@@ -1360,19 +1366,25 @@ async function loadDiscussionPosts() {
     const repliesList = (post.discussion_replies || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     const replyCount = repliesList.length;
 
-    const repliesHtml = repliesList.map(r => `
-      <p data-reply-id="${r.id}">
-        <b>${escapeHtml(r.profiles?.full_name || 'Student')}</b> · ${escapeHtml(r.content)}
-        <button class="heart-button reply-heart" aria-label="Like reply">♡ <span>0</span></button>
-        ${(currentProfile?.role === 'mod' || r.author_id === currentUser.id) ? '<button class="mod-delete reply-delete" aria-label="Delete reply">×</button>' : ''}
-      </p>
-    `).join('');
+    const repliesHtml = repliesList.map(r => {
+      const replyAuthorRole = r.profiles?.role;
+      const replyIsMod = replyAuthorRole === 'mod';
+      const replyModBadge = replyIsMod ? `<span style="background: var(--green, #22c55e); color: white; font-size: 9px; padding: 1px 5px; border-radius: 3px; margin-left: 4px; font-weight: bold;">MOD</span>` : '';
+
+      return `
+        <p data-reply-id="${r.id}">
+          <b>${escapeHtml(r.profiles?.full_name || 'Student')}</b>${replyModBadge} · ${escapeHtml(r.content)}
+          <button class="heart-button reply-heart" aria-label="Like reply">♡ <span>0</span></button>
+          ${(currentProfile?.role === 'mod' || r.author_id === currentUser.id) ? '<button class="mod-delete reply-delete" aria-label="Delete reply">×</button>' : ''}
+        </p>
+      `;
+    }).join('');
 
     return `
       <article class="community-post" data-id="${post.id}">
         <div class="post-head">
           <i class="mini-avatar green">${escapeHtml(initialsOf(authorName))}</i>
-          <div><b>${escapeHtml(authorName)}</b><p>${escapeHtml(formattedDate)}</p></div>
+          <div><div style="display: flex; align-items: center;"><b>${escapeHtml(authorName)}</b>${modBadgeHtml}</div><p>${escapeHtml(formattedDate)}</p></div>
         </div>
         <h3 class="discussion-title">${escapeHtml(post.title)}</h3>
         ${subjectHtml}
