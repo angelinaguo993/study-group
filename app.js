@@ -116,6 +116,7 @@ async function initializeApp() {
   await loadEnrollments();
   await loadClassesAndHomework();
   await loadCalendarEvents();
+  await loadDiscussionPosts();
   renderHomework();
   renderSchedule();
   renderResources();
@@ -647,7 +648,19 @@ function openModal(title, text, type = 'correction') {
     const classOptions = enrolledClasses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
     modalFields.innerHTML = `<label>Title<input id="resourceTitle" type="text" placeholder="e.g., Unit 3 study guide" required></label><label>Class<select id="resourceClass">${classOptions || '<option value="">No classes in your schedule yet</option>'}</select></label><label>Category<select id="resourceCategory" required><option value="notes">Notes</option><option value="practice">Practice</option><option value="study guide">Study guide</option><option value="other">Other</option></select></label><label>Collection<select id="resourceCollection" required><option value="AP">AP</option><option value="IB">IB</option><option value="SAT">SAT</option><option value="ACT">ACT</option><option value="elective">Elective</option><option value="other">Other</option></select></label><label>Link<input id="resourceLink" type="url" placeholder="https://" required></label><label>Description<textarea id="resourceDescription" placeholder="What is this material good for?" required></textarea></label>`;
   } else if (type === 'discussion') {
-    modalFields.innerHTML = '<label>Title of post<input id="discussionTitle" type="text" placeholder="What do you want to discuss?" required></label><label>Description of post<textarea id="discussionDescription" placeholder="Add context or a question for your classmates." required></textarea></label>';
+    const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
+    const classOptions = enrolledClasses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+
+    modalFields.innerHTML = `
+      <label>Title of post<input id="discussionTitle" type="text" placeholder="What do you want to discuss?" required></label>
+      <label>Subject (optional)
+        <select id="discussionSubject">
+          <option value="">Select a subject...</option>
+          ${classOptions}
+        </select>
+      </label>
+      <label>Description of post<textarea id="discussionDescription" placeholder="Add context or a question for your classmates." required></textarea></label>
+    `;
   } else {
     const options = assignments.map(a => `<option value="${a.id}">${escapeHtml(a.course)} — ${escapeHtml(a.title)}</option>`).join('');
     modalFields.innerHTML = `<label>Which assignment?<select id="correctionHomework">${options || '<option value="">No homework posted yet</option>'}</select></label><label>What needs to change?<textarea id="correctionText" placeholder="Describe the issue or update…"></textarea></label>`;
@@ -684,15 +697,21 @@ document.querySelector('#submitModal').addEventListener('click', async () => {
   }
   if (modalType === 'discussion') {
     const title = document.querySelector('#discussionTitle').value.trim();
+    const classId = document.querySelector('#discussionSubject').value || null;
     const description = document.querySelector('#discussionDescription').value.trim();
+
     if (!title || !description) return toast('Please add a title and description.');
-    const post = document.createElement('article');
-    post.className = 'community-post';
-    post.innerHTML = `<div class="post-head"><i class="mini-avatar green">${escapeHtml(initialsOf(currentProfile.full_name))}</i><div><b>${escapeHtml(currentProfile.full_name)}</b><p>Just now</p></div></div><h3 class="discussion-title"></h3><p class="discussion-description"></p><div class="post-actions"><button class="heart-button" aria-label="Like post">♡ <span>0</span></button><button class="replies-toggle" aria-expanded="false">◌ <span>0 replies</span></button></div><div class="replies" hidden></div>`;
-    post.querySelector('.discussion-title').textContent = title;
-    post.querySelector('.discussion-description').textContent = description;
-    setupDiscussionPost(post);
-    document.querySelector('.discussion-feed').prepend(post);
+
+    const { error } = await db.from('discussion_posts').insert({
+      author_id: currentUser.id,
+      class_id: classId,
+      title,
+      description
+    });
+
+    if (error) return toast('Could not save post: ' + error.message);
+
+    await loadDiscussionPosts();
     modal.classList.remove('open');
     return toast('Discussion post created.');
   }
@@ -754,7 +773,15 @@ document.querySelector('.discussion-feed').addEventListener('click', event => {
   const deletePost = event.target.closest('.mod-delete-post');
   if (deletePost) {
     if (!window.confirm('Are you sure you want to delete this discussion post?')) return;
-    deletePost.closest('.community-post').remove();
+    const postArticle = deletePost.closest('.community-post');
+    const postId = postArticle.dataset.id;
+
+    if (postId) {
+      const { error } = await db.from('discussion_posts').delete().eq('id', postId);
+      if (error) return toast('Could not delete post: ' + error.message);
+    }
+
+    postArticle.remove();
     return toast('Post removed.');
   }
   const deleteReply = event.target.closest('.reply-delete');
@@ -1200,6 +1227,41 @@ async function loadCorrections() {
     .order('created_at', { ascending: false });
   corrections = error ? [] : (data || []);
   renderCorrections();
+}
+
+async function loadDiscussionPosts() {
+  const feed = document.querySelector('.discussion-feed');
+  const { data: posts, error } = await db
+    .from('discussion_posts')
+    .select('*, profiles!discussion_posts_author_id_fkey(full_name), classes(name)')
+    .order('created_at', { ascending: false });
+
+  if (error || !posts) return;
+
+  feed.innerHTML = posts.map(post => {
+    const authorName = post.profiles?.full_name || 'Student';
+    const className = post.classes?.name;
+    const subjectHtml = className ? `<span class="course-tag blue" style="margin-bottom: 8px; display: inline-block;">${escapeHtml(className)}</span>` : '';
+
+    return `
+      <article class="community-post" data-id="${post.id}">
+        <div class="post-head">
+          <i class="mini-avatar green">${escapeHtml(initialsOf(authorName))}</i>
+          <div><b>${escapeHtml(authorName)}</b><p>Just now</p></div>
+        </div>
+        <h3 class="discussion-title">${escapeHtml(post.title)}</h3>
+        ${subjectHtml}
+        <p class="discussion-description">${escapeHtml(post.description)}</p>
+        <div class="post-actions">
+          <button class="heart-button" aria-label="Like post">♡ <span>0</span></button>
+          <button class="replies-toggle" aria-expanded="false">◌ <span>0 replies</span></button>
+        </div>
+        <div class="replies" hidden></div>
+      </article>
+    `;
+  }).join('');
+
+  document.querySelectorAll('.community-post').forEach(setupDiscussionPost);
 }
 
 function renderCorrections() {
