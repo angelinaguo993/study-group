@@ -878,15 +878,27 @@ document.querySelector('.discussion-feed').addEventListener('click', async event
     await loadDiscussionPosts();
     return toast('Reply removed.');
   }
-  
+
   const heart = event.target.closest('.heart-button');
-  if (heart) {
-    const count = heart.querySelector('span');
-    const liked = heart.classList.toggle('liked');
-    count.textContent = Math.max(0, Number(count.textContent) + (liked ? 1 : -1));
-    heart.firstChild.textContent = liked ? '♥ ' : '♡ ';
+  if (heart && !heart.classList.contains('reply-heart')) {
+    const postArticle = heart.closest('.community-post');
+    const postId = postArticle.dataset.id;
+    const isLiked = heart.classList.contains('liked');
+
+    if (isLiked) {
+      // Unlike: remove from database
+      const { error } = await db.from('discussion_likes').delete().eq('post_id', postId).eq('user_id', currentUser.id);
+      if (error) return toast('Could not update like.');
+    } else {
+      // Like: insert into database
+      const { error } = await db.from('discussion_likes').insert({ post_id: postId, user_id: currentUser.id });
+      if (error) return toast('Could not update like.');
+    }
+
+    await loadDiscussionPosts();
     return;
   }
+  
   const button = event.target.closest('.replies-toggle');
   if (!button) return;
   const replies = button.closest('.community-post').querySelector('.replies');
@@ -1328,7 +1340,7 @@ async function loadDiscussionPosts() {
   const feed = document.querySelector('.discussion-feed');
   const { data: posts, error } = await db
     .from('discussion_posts')
-    .select('*, profiles!discussion_posts_author_id_fkey(full_name), classes(name), discussion_replies(*, profiles(full_name))')
+    .select('*, profiles!discussion_posts_author_id_fkey(full_name), classes(name), discussion_replies(*, profiles(full_name)), discussion_likes(user_id)')
     .order('created_at', { ascending: false });
 
   if (error || !posts) return;
@@ -1340,6 +1352,10 @@ async function loadDiscussionPosts() {
     
     const postDate = new Date(post.created_at);
     const formattedDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(postDate);
+
+    const likes = post.discussion_likes || [];
+    const likeCount = likes.length;
+    const hasLiked = currentUser ? likes.some(l => l.user_id === currentUser.id) : false;
 
     const repliesList = (post.discussion_replies || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     const replyCount = repliesList.length;
@@ -1362,7 +1378,7 @@ async function loadDiscussionPosts() {
         ${subjectHtml}
         <p class="discussion-description">${escapeHtml(post.description)}</p>
         <div class="post-actions">
-          <button class="heart-button" aria-label="Like post">♡ <span>0</span></button>
+          <button class="heart-button ${hasLiked ? 'liked' : ''}" aria-label="Like post">${hasLiked ? '♥' : '♡'} <span>${likeCount}</span></button>
           <button class="replies-toggle" aria-expanded="false">◌ <span>${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span></button>
         </div>
         <div class="replies" hidden>
