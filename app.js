@@ -17,6 +17,19 @@ const iconPool = ['✦', '▤', '▰', '∑', '◌', '✎', '⚗', 'A', '◆', '
 const colorPool = ['green-paper', 'purple-paper', 'orange-paper'];
 const subjectDotColors = ['math', 'chem', 'history', 'spanish', 'blue', 'purple', 'orange', 'gold'];
 
+function getConsistentVisuals(identifier) {
+  if (!identifier) return { icon: '◆', color: 'blue' };
+  let hash = 0;
+  for (let i = 0; i < identifier.length; i++) {
+    hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash);
+  return {
+    icon: iconPool[index % iconPool.length],
+    color: subjectDotColors[index % subjectDotColors.length]
+  };
+}
+
 function getRandomItem(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -193,8 +206,13 @@ async function loadClassesAndHomework() {
   }
 }
 
-function assignmentTagColor(subject) { return subject === 'chem' ? 'purple' : ['history', 'spanish'].includes(subject) ? 'gold' : 'blue'; }
-function assignmentIcon(subject) { return subject === 'math' ? '∑' : subject === 'chem' ? '⚗' : subject === 'eng' ? 'A' : '◆'; }
+function assignmentIcon(classId) {
+  return getConsistentVisuals(classId).icon;
+}
+
+function assignmentTagColor(classId) {
+  return getConsistentVisuals(classId).color;
+}
 
 function sortedIncomplete() {
   return assignments.filter(a => !a.completed && a.enrolled).sort((a, b) => (a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity));
@@ -849,13 +867,18 @@ document.querySelector('.discussion-feed').addEventListener('click', async event
   const deleteReply = event.target.closest('.reply-delete');
   if (deleteReply) {
     if (!window.confirm('Are you sure you want to delete this reply?')) return;
-    const post = deleteReply.closest('.community-post');
-    deleteReply.closest('p').remove();
-    const toggle = post.querySelector('.replies-toggle span');
-    const count = Math.max(0, Number(toggle.textContent.match(/\d+/)?.[0] || 0) - 1);
-    toggle.textContent = `${count} ${count === 1 ? 'reply' : 'replies'}`;
+    const replyP = deleteReply.closest('p');
+    const replyId = replyP.dataset.replyId;
+
+    if (replyId) {
+      const { error } = await db.from('discussion_replies').delete().eq('id', replyId);
+      if (error) return toast('Could not delete reply: ' + error.message);
+    }
+
+    await loadDiscussionPosts();
     return toast('Reply removed.');
   }
+  
   const heart = event.target.closest('.heart-button');
   if (heart) {
     const count = heart.querySelector('span');
@@ -871,40 +894,38 @@ document.querySelector('.discussion-feed').addEventListener('click', async event
   replies.hidden = isOpen;
   button.setAttribute('aria-expanded', String(!isOpen));
 });
-document.querySelector('.discussion-feed').addEventListener('submit', event => {
+document.querySelector('.discussion-feed').addEventListener('submit', async event => {
   const composer = event.target.closest('.reply-composer');
   if (!composer) return;
   event.preventDefault();
+  
   const input = composer.querySelector('.reply-input');
   const replyText = input.value.trim();
   if (!replyText) return;
-  const reply = document.createElement('p');
-  reply.innerHTML = `<b>${escapeHtml(currentProfile.full_name)}</b> · `;
-  reply.append(replyText);
-  const heart = document.createElement('button');
-  heart.className = 'heart-button reply-heart';
-  heart.setAttribute('aria-label', 'Like reply');
-  heart.innerHTML = '♡ <span>0</span>';
-  reply.append(' ', heart);
-  composer.before(reply);
+
+  const postArticle = composer.closest('.community-post');
+  const postId = postArticle.dataset.id;
+
+  const { error } = await db.from('discussion_replies').insert({
+    post_id: postId,
+    author_id: currentUser.id,
+    content: replyText
+  });
+
+  if (error) return toast('Could not post reply: ' + error.message);
+
   input.value = '';
-  const toggle = composer.closest('.community-post').querySelector('.replies-toggle span');
-  const count = Number(toggle.textContent.match(/\d+/)?.[0] || 0) + 1;
-  toggle.textContent = `${count} ${count === 1 ? 'reply' : 'replies'}`;
-  applyModDiscussionControls(composer.closest('.community-post'));
+  await loadDiscussionPosts();
   toast('Reply posted.');
 });
 
 function renderManageClasses() {
   const list = document.querySelector('#manageClassList');
   list.innerHTML = classes.length ? classes.map(c => {
-    // Dynamically assign random style properties if missing
-    const randomIcon = getRandomItem(iconPool);
-    const randomDotColor = getRandomItem(subjectDotColors);
-
+    const visuals = getConsistentVisuals(c.id);
     return `
       <div class="class-setting">
-        <span class="subject-dot ${randomDotColor}">${randomIcon}</span>
+        <span class="subject-dot ${visuals.color}">${visuals.icon}</span>
         <div><b>${escapeHtml(c.name)}</b><p>${escapeHtml(c.teacher)}</p></div>
         <button class="delete-class" data-id="${c.id}">Remove</button>
       </div>
@@ -1307,7 +1328,7 @@ async function loadDiscussionPosts() {
   const feed = document.querySelector('.discussion-feed');
   const { data: posts, error } = await db
     .from('discussion_posts')
-    .select('*, profiles!discussion_posts_author_id_fkey(full_name), classes(name)')
+    .select('*, profiles!discussion_posts_author_id_fkey(full_name), classes(name), discussion_replies(*, profiles(full_name))')
     .order('created_at', { ascending: false });
 
   if (error || !posts) return;
@@ -1317,9 +1338,19 @@ async function loadDiscussionPosts() {
     const className = post.classes?.name;
     const subjectHtml = className ? `<span class="course-tag blue" style="margin-bottom: 8px; display: inline-block;">${escapeHtml(className)}</span>` : '';
     
-    // Format the timestamp into a readable date
     const postDate = new Date(post.created_at);
     const formattedDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(postDate);
+
+    const repliesList = (post.discussion_replies || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    const replyCount = repliesList.length;
+
+    const repliesHtml = repliesList.map(r => `
+      <p data-reply-id="${r.id}">
+        <b>${escapeHtml(r.profiles?.full_name || 'Student')}</b> · ${escapeHtml(r.content)}
+        <button class="heart-button reply-heart" aria-label="Like reply">♡ <span>0</span></button>
+        ${(currentProfile?.role === 'mod' || r.author_id === currentUser.id) ? '<button class="mod-delete reply-delete" aria-label="Delete reply">×</button>' : ''}
+      </p>
+    `).join('');
 
     return `
       <article class="community-post" data-id="${post.id}">
@@ -1332,14 +1363,18 @@ async function loadDiscussionPosts() {
         <p class="discussion-description">${escapeHtml(post.description)}</p>
         <div class="post-actions">
           <button class="heart-button" aria-label="Like post">♡ <span>0</span></button>
-          <button class="replies-toggle" aria-expanded="false">◌ <span>0 replies</span></button>
+          <button class="replies-toggle" aria-expanded="false">◌ <span>${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span></button>
         </div>
-        <div class="replies" hidden></div>
+        <div class="replies" hidden>
+          ${repliesHtml}
+          <form class="reply-composer">
+            <label>reply</label>
+            <div><input class="reply-input" type="text" placeholder="Write a reply…" aria-label="Write a reply"><button type="submit">Post</button></div>
+          </form>
+        </div>
       </article>
     `;
   }).join('');
-
-  document.querySelectorAll('.community-post').forEach(setupDiscussionPost);
 }
 
 function renderCorrections() {
