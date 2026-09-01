@@ -69,7 +69,7 @@ function setAuthMode(mode) {
   authMode = mode;
   showAuthError('');
   document.querySelector('#authHeading').textContent = mode === 'signin' ? 'Sign in' : 'Create your account';
-  document.querySelector('#authSubtitle').textContent = mode === 'signin' ? 'Welcome back — sign in to see your homework.' : 'Set up your StudyGroup account.';
+  document.querySelector('#authSubtitle').textContent = mode === 'signin' ? 'Welcome back! Sign in to see your homework.' : 'Set up your Study Group account.';
   document.querySelector('#authNameField').hidden = mode === 'signin';
   document.querySelector('#authEmailField').hidden = mode === 'signin';
   document.querySelector('#authSubmit').textContent = mode === 'signin' ? 'Sign in' : 'Sign up';
@@ -240,7 +240,7 @@ function updateDashboardAssignments() {
   dashboardAssignments.innerHTML = overviewAssignments.length ? overviewAssignments.map(a => {
     const initials = (a.teacher || '').split(' ').map(part => part[0]).join('').slice(0, 2);
     return `<article class="assignment-card" data-id="${a.id}"><div class="card-meta"><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><span>Due ${escapeHtml(a.due)}</span></div><h3>${escapeHtml(a.title)}</h3><p>${escapeHtml(a.description)}</p><div class="card-bottom"><span class="teacher"><i class="mini-avatar">${escapeHtml(initials)}</i> ${escapeHtml(a.teacher)}</span><button class="circle-check dashboard-check" aria-label="Complete assignment">✓</button></div></article>`;
-  }).join('') : '<p class="empty-homework">Nothing to show here right now — you\'re all caught up!</p>';
+  }).join('') : '<p class="empty-homework">Nothing to show here right now. You\'re all caught up!</p>';
 
   const remaining = upcoming.length;
   document.querySelector('#assignmentCount').textContent = `${remaining} assignment${remaining === 1 ? '' : 's'}`;
