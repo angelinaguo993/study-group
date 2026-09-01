@@ -769,7 +769,7 @@ function applyModDiscussionControls(scope) {
   });
 }
 document.querySelectorAll('.community-post').forEach(setupDiscussionPost);
-document.querySelector('.discussion-feed').addEventListener('click', event => {
+document.querySelector('.discussion-feed').addEventListener('click', async event => {
   const deletePost = event.target.closest('.mod-delete-post');
   if (deletePost) {
     if (!window.confirm('Are you sure you want to delete this discussion post?')) return;
