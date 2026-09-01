@@ -695,7 +695,7 @@ document.querySelector('#submitModal').addEventListener('click', async () => {
     modal.classList.remove('open');
     return toast('Resource shared with your study group.');
   }
-  if (modalType === 'discussion') {
+if (modalType === 'discussion') {
     const title = document.querySelector('#discussionTitle').value.trim();
     const classId = document.querySelector('#discussionSubject').value || null;
     const description = document.querySelector('#discussionDescription').value.trim();
@@ -711,7 +711,19 @@ document.querySelector('#submitModal').addEventListener('click', async () => {
 
     if (error) return toast('Could not save post: ' + error.message);
 
-    await loadDiscussionPosts();
+    const todayStr = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date());
+    const className = classes.find(c => c.id === classId)?.name;
+    const subjectHtml = className ? `<span class="course-tag blue" style="margin-bottom: 8px; display: inline-block;">${escapeHtml(className)}</span>` : '';
+
+    const post = document.createElement('article');
+    post.className = 'community-post';
+    post.innerHTML = `<div class="post-head"><i class="mini-avatar green">${escapeHtml(initialsOf(currentProfile.full_name))}</i><div><b>${escapeHtml(currentProfile.full_name)}</b><p>${escapeHtml(todayStr)}</p></div></div><h3 class="discussion-title"></h3>${subjectHtml}<p class="discussion-description"></p><div class="post-actions"><button class="heart-button" aria-label="Like post">♡ <span>0</span></button><button class="replies-toggle" aria-expanded="false">◌ <span>0 replies</span></button></div><div class="replies" hidden></div>`;
+    
+    post.querySelector('.discussion-title').textContent = title;
+    post.querySelector('.discussion-description').textContent = description;
+    
+    setupDiscussionPost(post);
+    document.querySelector('.discussion-feed').prepend(post);
     modal.classList.remove('open');
     return toast('Discussion post created.');
   }
@@ -1242,12 +1254,16 @@ async function loadDiscussionPosts() {
     const authorName = post.profiles?.full_name || 'Student';
     const className = post.classes?.name;
     const subjectHtml = className ? `<span class="course-tag blue" style="margin-bottom: 8px; display: inline-block;">${escapeHtml(className)}</span>` : '';
+    
+    // Format the timestamp into a readable date
+    const postDate = new Date(post.created_at);
+    const formattedDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(postDate);
 
     return `
       <article class="community-post" data-id="${post.id}">
         <div class="post-head">
           <i class="mini-avatar green">${escapeHtml(initialsOf(authorName))}</i>
-          <div><b>${escapeHtml(authorName)}</b><p>Just now</p></div>
+          <div><b>${escapeHtml(authorName)}</b><p>${escapeHtml(formattedDate)}</p></div>
         </div>
         <h3 class="discussion-title">${escapeHtml(post.title)}</h3>
         ${subjectHtml}
