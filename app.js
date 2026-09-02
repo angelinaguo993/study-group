@@ -439,9 +439,10 @@ function renderCalendar() {
 
     const assignmentHtml = dayAssignments.map(assignment => {
       const color = getClassColor(assignment.classId);
-
       return `
-        <div class="calendar-event ${color.bg}" title="${escapeHtml(assignment.title)}">
+        <div class="calendar-event ${color.bg} clickable-event" 
+             data-title="${escapeHtml(assignment.title)}" 
+             data-desc="${escapeHtml(assignment.course)}: ${escapeHtml(assignment.description || 'No description')}">
           ${escapeHtml(assignment.title)}
         </div>
       `;
@@ -449,7 +450,9 @@ function renderCalendar() {
 
     const eventHtml = dayEvents.map(event => {
       return `
-        <div class="calendar-event event-bg" title="${escapeHtml(event.description || event.title)}">
+        <div class="calendar-event event-bg clickable-event" 
+             data-title="${escapeHtml(event.title)}" 
+             data-desc="${escapeHtml(event.description || 'No description provided.')}">
           ${escapeHtml(event.title)}
         </div>
       `;
@@ -466,6 +469,16 @@ function renderCalendar() {
 }
 
 renderCalendar();
+
+grid.addEventListener('click', event => {
+  const clickedItem = event.target.closest('.clickable-event');
+  if (!clickedItem) return;
+  
+  const title = clickedItem.dataset.title;
+  const description = clickedItem.dataset.desc;
+  
+  openModal(title, description, 'calendar-event');
+});
 
 document.querySelector('#previousMonth').addEventListener('click', () => {
   if (displayedMonth === 0) {
@@ -689,6 +702,7 @@ const modal = document.querySelector('#modal');
 const modalEyebrow = document.querySelector('#modalEyebrow');
 const modalFields = document.querySelector('#modalFields');
 let modalType = 'correction';
+
 function openModal(title, text, type = 'correction', extraData = null) {
   modalType = type;
   document.querySelector('#modalTitle').textContent = title;
@@ -711,7 +725,7 @@ function openModal(title, text, type = 'correction', extraData = null) {
         <a href="${escapeHtml(safeLink)}" target="_blank" rel="noopener noreferrer" class="text-link" style="display: inline-block; margin-top: 4px;">Open resource link ↗</a>
       </div>
     `;
-    document.querySelector('#submitModal').style.display = 'none'; // Hide submit button for viewing details
+    document.querySelector('#submitModal').style.display = 'none';
   } else if (type === 'discussion') {
     const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
     const classOptions = enrolledClasses.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
@@ -727,6 +741,9 @@ function openModal(title, text, type = 'correction', extraData = null) {
     `;
     document.querySelector('#submitModal').textContent = 'Create post';
     document.querySelector('#submitModal').style.display = '';
+  } else if (type === 'calendar-event') {
+    modalFields.innerHTML = ''; 
+    document.querySelector('#submitModal').style.display = 'none';
   } else {
     const options = assignments.map(a => `<option value="${a.id}">${escapeHtml(a.course)} — ${escapeHtml(a.title)}</option>`).join('');
     modalFields.innerHTML = `<label>Which assignment?<select id="correctionHomework">${options || '<option value="">No homework posted yet</option>'}</select></label><label>What needs to change?<textarea id="correctionText" placeholder="Describe the issue or update…"></textarea></label>`;

@@ -80,3 +80,7 @@ body{font-size:16px}.subtitle{font-size:16px}.soft-button,.primary-button,.dark-
 .resource-card .mod-delete{z-index:1}
 
 @media(max-width:600px){.calendar-controls{text-align:left}.discussion-feed{max-height:440px}}
+
+.clickable-event {
+  cursor: pointer;
+}
