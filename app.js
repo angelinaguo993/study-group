@@ -439,9 +439,10 @@ function renderCalendar() {
 
     const assignmentHtml = dayAssignments.map(assignment => {
       const color = getClassColor(assignment.classId);
-
       return `
-        <div class="calendar-event ${color.bg}" title="${escapeHtml(assignment.title)}">
+        <div class="calendar-event ${color.bg} clickable-event" 
+             data-title="${escapeHtml(assignment.title)}" 
+             data-desc="${escapeHtml(assignment.course)}: ${escapeHtml(assignment.description || 'No description')}">
           ${escapeHtml(assignment.title)}
         </div>
       `;
@@ -449,7 +450,9 @@ function renderCalendar() {
 
     const eventHtml = dayEvents.map(event => {
       return `
-        <div class="calendar-event event-bg" title="${escapeHtml(event.description || event.title)}">
+        <div class="calendar-event event-bg clickable-event" 
+             data-title="${escapeHtml(event.title)}" 
+             data-desc="${escapeHtml(event.description || 'No description provided.')}">
           ${escapeHtml(event.title)}
         </div>
       `;
@@ -712,6 +715,10 @@ function openModal(title, text, type = 'correction', extraData = null) {
       </div>
     `;
     document.querySelector('#submitModal').style.display = 'none'; // Hide submit button for viewing details
+
+  } else if (type === 'calendar-event') {
+    modalFields.innerHTML = ''; 
+    document.querySelector('#submitModal').style.display = 'none';
   } else if (type === 'discussion') {
     const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
     const classOptions = enrolledClasses.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
@@ -1188,6 +1195,16 @@ document.querySelector('#addEventButton')?.addEventListener('click', async () =>
   renderManageEvents();
   renderAgendaList();
   renderCalendar();
+
+  grid.addEventListener('click', event => {
+    const clickedItem = event.target.closest('.clickable-event');
+    if (!clickedItem) return;
+    
+    const title = clickedItem.dataset.title;
+    const description = clickedItem.dataset.desc;
+    
+    openModal(title, description, 'calendar-event');
+  });
 
   toast('Event added to the calendar.');
 });
