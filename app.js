@@ -1131,6 +1131,8 @@ function renderAgendaList() {
   }).join('');
 }
 
+let editingEventId = null;
+
 function renderManageEvents() {
   const container = document.querySelector('#manageEventList');
 
@@ -1146,6 +1148,17 @@ function renderManageEvents() {
   }
 
   container.innerHTML = upcomingEvents.map(event => {
+    if (event.id === editingEventId) {
+      return `
+        <div class="manage-homework-row editing" data-id="${event.id}"><div class="manage-form">
+          <label>Title<input class="edit-event-title" type="text" value="${escapeHtml(event.title)}"></label>
+          <label>Date<input class="edit-event-date" type="date" value="${event.event_date}"></label>
+          <label>Description<textarea class="edit-event-description">${escapeHtml(event.description || '')}</textarea></label>
+          <div class="correction-actions"><button class="approve save-calendar-event" data-id="${event.id}">Save</button><button class="reject cancel-calendar-event" data-id="${event.id}">Cancel</button></div>
+        </div></div>
+      `;
+    }
+
     const date = new Date(event.event_date + 'T00:00:00');
 
     const formattedDate = new Intl.DateTimeFormat('en-US', {
@@ -1165,6 +1178,7 @@ function renderManageEvents() {
         </div>
 
         <div class="correction-actions">
+          <button class="approve edit-calendar-event" data-id="${event.id}">Edit</button>
           <button class="reject delete-calendar-event" data-id="${event.id}">
             Delete
           </button>
@@ -1234,6 +1248,50 @@ document.querySelector('#manageEventList')?.addEventListener('click', async even
   renderCalendar();
 
   toast('Event deleted.');
+});
+
+document.querySelector('#manageEventList')?.addEventListener('click', async event => {
+  const editButton = event.target.closest('.edit-calendar-event');
+  if (editButton) {
+    editingEventId = editButton.dataset.id;
+    renderManageEvents();
+    return;
+  }
+
+  const cancelButton = event.target.closest('.cancel-calendar-event');
+  if (cancelButton) {
+    editingEventId = null;
+    renderManageEvents();
+    return;
+  }
+
+  const saveButton = event.target.closest('.save-calendar-event');
+  if (saveButton) {
+    const row = saveButton.closest('.manage-homework-row');
+    const title = row.querySelector('.edit-event-title').value.trim();
+    const event_date = row.querySelector('.edit-event-date').value;
+    const description = row.querySelector('.edit-event-description').value.trim();
+
+    if (!title || !event_date) {
+      return toast('Please enter an event title and date.');
+    }
+
+    const { error } = await db
+      .from('calendar_events')
+      .update({ title, event_date, description: description || null })
+      .eq('id', saveButton.dataset.id);
+
+    if (error) {
+      return toast('Could not update event: ' + error.message);
+    }
+
+    editingEventId = null;
+    await loadCalendarEvents();
+    renderManageEvents();
+    renderAgendaList();
+    renderCalendar();
+    toast('Event updated.');
+  }
 });
 
 // ============================================
