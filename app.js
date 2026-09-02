@@ -470,6 +470,16 @@ function renderCalendar() {
 
 renderCalendar();
 
+grid.addEventListener('click', event => {
+  const clickedItem = event.target.closest('.clickable-event');
+  if (!clickedItem) return;
+  
+  const title = clickedItem.dataset.title;
+  const description = clickedItem.dataset.desc;
+  
+  openModal(title, description, 'calendar-event');
+});
+
 document.querySelector('#previousMonth').addEventListener('click', () => {
   if (displayedMonth === 0) {
     displayedMonth = 11;
@@ -1195,16 +1205,6 @@ document.querySelector('#addEventButton')?.addEventListener('click', async () =>
   renderManageEvents();
   renderAgendaList();
   renderCalendar();
-
-  grid.addEventListener('click', event => {
-    const clickedItem = event.target.closest('.clickable-event');
-    if (!clickedItem) return;
-    
-    const title = clickedItem.dataset.title;
-    const description = clickedItem.dataset.desc;
-    
-    openModal(title, description, 'calendar-event');
-  });
 
   toast('Event added to the calendar.');
 });
