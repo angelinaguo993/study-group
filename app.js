@@ -692,6 +692,7 @@ const modal = document.querySelector('#modal');
 const modalEyebrow = document.querySelector('#modalEyebrow');
 const modalFields = document.querySelector('#modalFields');
 let modalType = 'correction';
+
 function openModal(title, text, type = 'correction', extraData = null) {
   modalType = type;
   document.querySelector('#modalTitle').textContent = title;
@@ -714,10 +715,6 @@ function openModal(title, text, type = 'correction', extraData = null) {
         <a href="${escapeHtml(safeLink)}" target="_blank" rel="noopener noreferrer" class="text-link" style="display: inline-block; margin-top: 4px;">Open resource link ↗</a>
       </div>
     `;
-    document.querySelector('#submitModal').style.display = 'none'; // Hide submit button for viewing details
-
-  } else if (type === 'calendar-event') {
-    modalFields.innerHTML = ''; 
     document.querySelector('#submitModal').style.display = 'none';
   } else if (type === 'discussion') {
     const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
@@ -734,6 +731,9 @@ function openModal(title, text, type = 'correction', extraData = null) {
     `;
     document.querySelector('#submitModal').textContent = 'Create post';
     document.querySelector('#submitModal').style.display = '';
+  } else if (type === 'calendar-event') {
+    modalFields.innerHTML = ''; 
+    document.querySelector('#submitModal').style.display = 'none';
   } else {
     const options = assignments.map(a => `<option value="${a.id}">${escapeHtml(a.course)} — ${escapeHtml(a.title)}</option>`).join('');
     modalFields.innerHTML = `<label>Which assignment?<select id="correctionHomework">${options || '<option value="">No homework posted yet</option>'}</select></label><label>What needs to change?<textarea id="correctionText" placeholder="Describe the issue or update…"></textarea></label>`;
