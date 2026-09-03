@@ -138,13 +138,17 @@ async function initializeApp() {
   applyModDiscussionControls();
   await refreshModRequestUI();
   if (currentProfile.role === 'mod') {
+
     renderManageClasses();
     populateHomeworkClassSelect();
     renderManageHomework();
     renderManageEvents();
+
     await loadCorrections();
     await loadModRequests();
     await loadResources();
+
+    renderResources();
   } 
 }
 
