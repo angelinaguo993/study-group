@@ -206,6 +206,10 @@ async function loadResources() {
   if (!error) resources = data || [];
 }
 
+async function deleteResource(resourceId) {
+    await db.from('resources').delete().eq('id', resourceId);
+}
+
 function assignmentIcon(classId) {
   return getConsistentVisuals(classId).icon;
 }
@@ -659,7 +663,7 @@ function renderResources() {
   }).join('') : '<p class="empty-resources">No resources in this collection yet.</p>';
 }
 
-resourceGrid.addEventListener('click', event => {
+resourceGrid.addEventListener('click', async event => {
   const deleteBtn = event.target.closest('.mod-delete');
   if (deleteBtn) {
     if (!window.confirm('Are you sure you want to delete this resource?')) return;
