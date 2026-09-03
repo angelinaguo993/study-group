@@ -193,7 +193,7 @@ async function loadClassesAndHomework() {
     description: h.description || '',
     dueDate: h.due_date ? new Date(h.due_date + 'T00:00:00') : null,
     dueDateRaw: h.due_date || '',
-    due: h.due_date ? new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(h.due_date + 'T00:00:00')) : 'No due date',
+    due: h.due_date ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(h.due_date + 'T00:00:00')) : 'No due date',
     completed: completedSet.has(h.id),
     enrolled: enrolledClassIds.has(h.class_id)
   }));
@@ -287,7 +287,7 @@ function updateFilterCounts() {
 function renderHomework() {
   const visibleAssignments = matchingAssignments();
   homeworkList.innerHTML = visibleAssignments.length ? visibleAssignments.map(a => {
-    return `<article class="homework-row ${a.completed ? 'is-complete' : ''}"><span class="subject-dot ${a.subject}">${assignmentIcon(a.subject)}</span><div class="homework-main"><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><h3>${escapeHtml(a.title)}</h3><p>${escapeHtml(a.description)}</p><small>${escapeHtml(a.teacher)}</small></div><div class="homework-due"><b>${escapeHtml(a.due)}</b><small>Due date</small></div><button class="circle-check homework-check ${a.completed ? 'done' : ''}" data-id="${a.id}" aria-label="${a.completed ? 'Mark incomplete' : 'Mark complete'}">✓</button></article>`;
+    return `<article class="homework-row ${a.completed ? 'is-complete' : ''}"><span class="subject-dot ${a.subject}">${assignmentIcon(a.subject)}</span><div class="homework-main"><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><h3>${escapeHtml(a.title)}</h3><p>${escapeHtml(a.description)}</p><small>${escapeHtml(a.teacher)} · Posted by ${escapeHtml(a.postedBy)}</small></div><div class="homework-due"><b>${escapeHtml(a.due)}</b><small>Due date</small></div><button class="circle-check homework-check ${a.completed ? 'done' : ''}" data-id="${a.id}" aria-label="${a.completed ? 'Mark incomplete' : 'Mark complete'}">✓</button></article>`;
   }).join('') : '<p class="empty-homework">No assignments found for this view.</p>';
   updateFilterCounts();
   updateDashboardAssignments();
@@ -1074,7 +1074,7 @@ function renderManageHomework() {
       </div></div>`;
     }
     return `<div class="manage-homework-row" data-id="${a.id}">
-      <div><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><b>${escapeHtml(a.title)}</b><p>${escapeHtml(a.description || 'No description')}</p><small>Due ${escapeHtml(a.due)} · Posted by ${escapeHtml(a.postedBy)}</small></div>
+      <div><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><b>${escapeHtml(a.title)}</b><p>${escapeHtml(a.description || 'No description')}</p><small>Teacher: ${escapeHtml(a.teacher)} · Due ${escapeHtml(a.due)} · Posted by ${escapeHtml(a.postedBy)}</small></div>
       <div class="correction-actions"><button class="approve edit-homework" data-id="${a.id}">Edit</button><button class="reject delete-homework" data-id="${a.id}">Delete</button></div>
     </div>`;
   }).join('');
