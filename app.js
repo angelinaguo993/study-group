@@ -203,7 +203,11 @@ async function loadClassesAndHomework() {
 
 async function loadResources() {
   const { data, error } = await db.from('resources').select('*');
-  if (!error) resources = data || [];
+  console.log('RESOURCES DATA:', data);
+  console.log('RESOURCES ERROR:', error);
+  if (!error) {
+    resources = data || [];
+  }
 }
 
 async function deleteResource(resourceId) {
