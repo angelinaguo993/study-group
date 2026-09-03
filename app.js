@@ -43,14 +43,7 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-const resources = [
-  { title: 'Derivative rules at a glance', type: 'Study guide', subject: 'AP Calc', collection: 'AP', author: 'Maya Thompson', icon: '✦', color: 'green-paper' },
-  { title: 'Calorimetry practice problems', type: 'Practice', subject: 'Chemistry', collection: 'IB', author: 'Jordan Lee', icon: '▤', color: 'purple-paper' },
-  { title: 'Things Fall Apart themes', type: 'Notes', subject: 'English 10', collection: 'elective', author: 'Sam Patel', icon: '▰', color: 'orange-paper' },
-  { title: 'Digital SAT math formula sheet', type: 'Study guide', subject: 'Math', collection: 'SAT', author: 'Avery Chen', icon: '∑', color: 'green-paper' },
-  { title: 'ACT science timing drills', type: 'Practice', subject: 'Science', collection: 'ACT', author: 'Maya Thompson', icon: '◌', color: 'purple-paper' },
-  { title: 'College essay brainstorming prompts', type: 'Notes', subject: 'Writing', collection: 'other', author: 'Jordan Lee', icon: '✎', color: 'orange-paper' }
-];
+let resources = [];
 let activeResourceCollection = 'all';
 let activeResourceSubject = 'all';
 let activeHomeworkFilter = 'yours';
@@ -145,14 +138,20 @@ async function initializeApp() {
   applyModDiscussionControls();
   await refreshModRequestUI();
   if (currentProfile.role === 'mod') {
+
     renderManageClasses();
     populateHomeworkClassSelect();
     renderManageHomework();
     renderManageEvents();
+
     await loadCorrections();
     await loadModRequests();
+    await loadResources();
+
+    renderResources();
   } 
 }
+
 
 function initialsOf(name) {
   return name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase();
@@ -194,7 +193,7 @@ async function loadClassesAndHomework() {
     description: h.description || '',
     dueDate: h.due_date ? new Date(h.due_date + 'T00:00:00') : null,
     dueDateRaw: h.due_date || '',
-    due: h.due_date ? new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(h.due_date + 'T00:00:00')) : 'No due date',
+    due: h.due_date ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(h.due_date + 'T00:00:00')) : 'No due date',
     completed: completedSet.has(h.id),
     enrolled: enrolledClassIds.has(h.class_id)
   }));
@@ -204,6 +203,19 @@ async function loadClassesAndHomework() {
   if (typeof renderCalendar === 'function') {
     renderCalendar();
   }
+}
+
+async function loadResources() {
+  const { data, error } = await db.from('resources').select('*');
+  console.log('RESOURCES DATA:', data);
+  console.log('RESOURCES ERROR:', error);
+  if (!error) {
+    resources = data || [];
+  }
+}
+
+async function deleteResource(resourceId) {
+    await db.from('resources').delete().eq('id', resourceId);
 }
 
 function assignmentIcon(classId) {
@@ -275,7 +287,7 @@ function updateFilterCounts() {
 function renderHomework() {
   const visibleAssignments = matchingAssignments();
   homeworkList.innerHTML = visibleAssignments.length ? visibleAssignments.map(a => {
-    return `<article class="homework-row ${a.completed ? 'is-complete' : ''}"><span class="subject-dot ${a.subject}">${assignmentIcon(a.subject)}</span><div class="homework-main"><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><h3>${escapeHtml(a.title)}</h3><p>${escapeHtml(a.description)}</p><small>${escapeHtml(a.teacher)}</small></div><div class="homework-due"><b>${escapeHtml(a.due)}</b><small>Due date</small></div><button class="circle-check homework-check ${a.completed ? 'done' : ''}" data-id="${a.id}" aria-label="${a.completed ? 'Mark incomplete' : 'Mark complete'}">✓</button></article>`;
+    return `<article class="homework-row ${a.completed ? 'is-complete' : ''}"><span class="subject-dot ${a.subject}">${assignmentIcon(a.subject)}</span><div class="homework-main"><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><h3>${escapeHtml(a.title)}</h3><p>${escapeHtml(a.description)}</p><small>${escapeHtml(a.teacher)} · Posted by ${escapeHtml(a.postedBy)}</small></div><div class="homework-due"><b>${escapeHtml(a.due)}</b><small>Due date</small></div><button class="circle-check homework-check ${a.completed ? 'done' : ''}" data-id="${a.id}" aria-label="${a.completed ? 'Mark incomplete' : 'Mark complete'}">✓</button></article>`;
   }).join('') : '<p class="empty-homework">No assignments found for this view.</p>';
   updateFilterCounts();
   updateDashboardAssignments();
@@ -659,16 +671,19 @@ function renderResources() {
   }).join('') : '<p class="empty-resources">No resources in this collection yet.</p>';
 }
 
-resourceGrid.addEventListener('click', event => {
+resourceGrid.addEventListener('click', async event => {
   const deleteBtn = event.target.closest('.mod-delete');
   if (deleteBtn) {
     if (!window.confirm('Are you sure you want to delete this resource?')) return;
-    const card = deleteBtn.closest('.resource-card');
-    const index = Number(card.dataset.index);
-    resources.splice(index, 1);
-    renderResources();
-    toast('Resource removed.');
-    return;
+      const card = deleteBtn.closest('.resource-card');
+      const index = Number(card.dataset.index);
+      const resourceId = resources[index].id;
+
+      await db.from('resources').delete().eq('id', resourceId);
+      await loadResources();
+      renderResources();
+      toast('Resource removed.');
+      return;
   }
 
   const card = event.target.closest('.clickable-resource-card');
@@ -772,10 +787,26 @@ document.querySelector('#submitModal').addEventListener('click', async () => {
     const link = document.querySelector('#resourceLink').value.trim();
     const description = document.querySelector('#resourceDescription').value.trim();
     if (!title || !link || !description) return toast('Please complete all three resource fields.');
-    resources.unshift({ title, type: category, classId: classId || null, className, collection, author: currentProfile.full_name, icon: '↗', color: 'green-paper', link, description });
+    const { error } = await db.from('resources').insert({
+      title,
+      type: category,
+      classId: classId || null,
+      className,
+      collection,
+      author: currentProfile.full_name,
+      icon: '↗',
+      color: 'green-paper',
+      link,
+      description
+    });
+
+    if (error) return toast('Could not share resource.');
+    // resources.unshift({ title, type: category, classId: classId || null, className, collection, author: currentProfile.full_name, icon: '↗', color: 'green-paper', link, description });
     activeResourceCollection = collection;
     activeResourceSubject = 'all';
     document.querySelectorAll('.resource-tabs [data-resource-collection]').forEach(tab => tab.classList.toggle('active', tab.dataset.resourceCollection === collection));
+
+    await loadResources();
     renderResources();
     modal.classList.remove('open');
     return toast('Resource shared with your study group.');
@@ -1043,7 +1074,7 @@ function renderManageHomework() {
       </div></div>`;
     }
     return `<div class="manage-homework-row" data-id="${a.id}">
-      <div><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><b>${escapeHtml(a.title)}</b><p>${escapeHtml(a.description || 'No description')}</p><small>Due ${escapeHtml(a.due)} · Posted by ${escapeHtml(a.postedBy)}</small></div>
+      <div><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><b>${escapeHtml(a.title)}</b><p>${escapeHtml(a.description || 'No description')}</p><small>Teacher: ${escapeHtml(a.teacher)} · Due ${escapeHtml(a.due)} · Posted by ${escapeHtml(a.postedBy)}</small></div>
       <div class="correction-actions"><button class="approve edit-homework" data-id="${a.id}">Edit</button><button class="reject delete-homework" data-id="${a.id}">Delete</button></div>
     </div>`;
   }).join('');
