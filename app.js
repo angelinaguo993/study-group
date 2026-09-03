@@ -144,10 +144,10 @@ async function initializeApp() {
     renderManageEvents();
     await loadCorrections();
     await loadModRequests();
+    await loadResources();
   } 
 }
 
-await loadResources();
 
 function initialsOf(name) {
   return name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase();
