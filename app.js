@@ -177,9 +177,10 @@ async function loadClassesAndHomework() {
 
   const { data: calendarEventsData, error: calendarEventsError } = await db
   .from('calendar_events')
-  .select('*')
+  .select('*, profiles!calendar_events_created_by_fkey(full_name)')  
   .order('event_date', { ascending: true });
 
+  
   calendarEvents = calendarEventsError ? [] : (calendarEventsData || []);
 
   assignments = (homeworkData || []).map(h => ({
