@@ -177,9 +177,10 @@ async function loadClassesAndHomework() {
 
   const { data: calendarEventsData, error: calendarEventsError } = await db
   .from('calendar_events')
-  .select('*')
+  .select('*, profiles!calendar_events_created_by_fkey(full_name)')  
   .order('event_date', { ascending: true });
 
+  
   calendarEvents = calendarEventsError ? [] : (calendarEventsData || []);
 
   assignments = (homeworkData || []).map(h => ({
@@ -189,6 +190,7 @@ async function loadClassesAndHomework() {
     subject: h.classes?.subject_code || 'other',
     teacher: h.classes?.teacher || '',
     postedBy: h.profiles?.full_name || 'a moderator',
+    postedDate: h.created_at ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(h.created_at)) : '',
     title: h.title,
     description: h.description || '',
     dueDate: h.due_date ? new Date(h.due_date + 'T00:00:00') : null,
@@ -454,17 +456,26 @@ function renderCalendar() {
       return `
         <div class="calendar-event ${color.bg} clickable-event" 
              data-title="${escapeHtml(assignment.title)}" 
-             data-desc="${escapeHtml(assignment.course)}: ${escapeHtml(assignment.description || 'No description')}">
+             data-desc="${escapeHtml(assignment.course)}: ${escapeHtml(assignment.description || 'No description')}"
+             data-teacher="${escapeHtml(assignment.teacher || '')}"
+             data-posted-by="${escapeHtml(assignment.postedBy || '')}"
+             data-posted-date="${escapeHtml(assignment.postedDate || '')}">
           ${escapeHtml(assignment.title)}
         </div>
       `;
     }).join('');
 
     const eventHtml = dayEvents.map(event => {
+      const postedByName = event.profiles?.full_name || 'a moderator';
+      const postedDateFormatted = event.created_at
+        ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(event.created_at))
+        : '';
       return `
         <div class="calendar-event event-bg clickable-event" 
              data-title="${escapeHtml(event.title)}" 
-             data-desc="${escapeHtml(event.description || 'No description provided.')}">
+             data-desc="${escapeHtml(event.description || 'No description provided.')}"
+             data-posted-by="${escapeHtml(postedByName)}"
+             data-posted-date="${escapeHtml(postedDateFormatted)}">
           ${escapeHtml(event.title)}
         </div>
       `;
@@ -488,8 +499,14 @@ grid.addEventListener('click', event => {
   
   const title = clickedItem.dataset.title;
   const description = clickedItem.dataset.desc;
+  const teacher = clickedItem.dataset.teacher || '';
+  const postedBy = clickedItem.dataset.postedBy || '';
+  const postedDate = clickedItem.dataset.postedDate || '';
+
+  const postedPart = postedBy ? `Posted by ${postedBy}${postedDate ? ` (${postedDate})` : ''}` : '';
+  const eyebrowText = teacher ? `${teacher}${postedPart ? ` · ${postedPart}` : ''}` : postedPart;
   
-  openModal(title, description, 'calendar-event');
+  openModal(title, description, 'calendar-event', { eyebrow: eyebrowText });
 });
 
 document.querySelector('#previousMonth').addEventListener('click', () => {
@@ -723,6 +740,7 @@ function openModal(title, text, type = 'correction', extraData = null) {
   document.querySelector('#modalTitle').textContent = title;
   document.querySelector('#modalText').textContent = text;
   modalEyebrow.hidden = type === 'correction';
+  modalEyebrow.textContent = 'COLLABORATE';
   
   if (type === 'resource') {
     const enrolledClasses = classes.filter(c => enrolledClassIds.has(c.id));
@@ -757,8 +775,11 @@ function openModal(title, text, type = 'correction', extraData = null) {
     document.querySelector('#submitModal').textContent = 'Create post';
     document.querySelector('#submitModal').style.display = '';
   } else if (type === 'calendar-event') {
-    modalFields.innerHTML = ''; 
+    modalFields.innerHTML = '';
     document.querySelector('#submitModal').style.display = 'none';
+    if (extraData?.eyebrow) {
+      modalEyebrow.textContent = extraData.eyebrow;
+    }
   } else {
     const options = assignments.map(a => `<option value="${a.id}">${escapeHtml(a.course)} — ${escapeHtml(a.title)}</option>`).join('');
     modalFields.innerHTML = `<label>Which assignment?<select id="correctionHomework">${options || '<option value="">No homework posted yet</option>'}</select></label><label>What needs to change?<textarea id="correctionText" placeholder="Describe the issue or update…"></textarea></label>`;
@@ -1074,7 +1095,7 @@ function renderManageHomework() {
       </div></div>`;
     }
     return `<div class="manage-homework-row" data-id="${a.id}">
-      <div><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><b>${escapeHtml(a.title)}</b><p>${escapeHtml(a.description || 'No description')}</p><small>Teacher: ${escapeHtml(a.teacher)} · Due ${escapeHtml(a.due)} · Posted by ${escapeHtml(a.postedBy)}</small></div>
+      <div><span class="course-tag ${assignmentTagColor(a.subject)}">${escapeHtml(a.course)}</span><b>${escapeHtml(a.title)}</b><p>${escapeHtml(a.description || 'No description')}</p><small>${escapeHtml(a.teacher)} · Due ${escapeHtml(a.due)} · Posted by ${escapeHtml(a.postedBy)}${a.postedDate ? ` (${escapeHtml(a.postedDate)})` : ''}</small></div>
       <div class="correction-actions"><button class="approve edit-homework" data-id="${a.id}">Edit</button><button class="reject delete-homework" data-id="${a.id}">Delete</button></div>
     </div>`;
   }).join('');
@@ -1129,7 +1150,7 @@ document.querySelector('#manageHomeworkList').addEventListener('click', async ev
 async function loadCalendarEvents() {
   const { data, error } = await db
     .from('calendar_events')
-    .select('*')
+    .select('*, profiles!calendar_events_created_by_fkey(full_name)')
     .order('event_date', { ascending: true });
 
   if (error) {
@@ -1192,20 +1213,23 @@ function renderManageEvents() {
 
     const date = new Date(event.event_date + 'T00:00:00');
 
-    const formattedDate = new Intl.DateTimeFormat('en-US', {
-      weekday: 'short',
+    const eventDateFormatted = new Intl.DateTimeFormat('en-US', {
       month: 'short',
-      day: 'numeric',
-      year: 'numeric'
+      day: 'numeric'
     }).format(date);
+
+    const postedByName = event.profiles?.full_name || 'a moderator';
+
+    const postedDateFormatted = event.created_at
+      ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(event.created_at))
+      : '';
 
     return `
       <div class="manage-homework-row" data-id="${event.id}">
         <div>
-          <span class="course-tag gold">EVENT</span>
           <b>${escapeHtml(event.title)}</b>
           <p>${escapeHtml(event.description || 'No description')}</p>
-          <small>${escapeHtml(formattedDate)}</small>
+          <small>${escapeHtml(eventDateFormatted)} · Posted by ${escapeHtml(postedByName)}${postedDateFormatted ? ` (${escapeHtml(postedDateFormatted)})` : ''}</small>
         </div>
 
         <div class="correction-actions">
