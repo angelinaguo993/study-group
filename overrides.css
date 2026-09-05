@@ -84,3 +84,72 @@ body{font-size:16px}.subtitle{font-size:16px}.soft-button,.primary-button,.dark-
 .clickable-event {
   cursor: pointer;
 }
+
+.calendar-weekdays,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-event {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.day {
+  position: relative;
+}
+
+.more-events-btn {
+  font-size: 11px;
+  color: var(--text-muted, #666);
+  cursor: pointer;
+  margin-top: 2px;
+  padding: 2px 4px;
+  font-weight: 500;
+}
+
+.more-events-btn:hover {
+  text-decoration: underline;
+}
+
+.day-popover {
+  display: none;
+  position: fixed;
+  width: 220px;
+  background: white;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  padding: 8px;
+  z-index: 1000;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.day-popover.show {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The mini in-cell event styling (margin-top for spacing under the day
+   number, nowrap+ellipsis for truncation) doesn't belong on the full-size
+   list inside the popover — undo it there so titles show in full. */
+.day-popover .calendar-event {
+  margin-top: 0;
+  white-space: normal;
+}
+
+/* Force the grid rows and day cells to expand vertically based on their content */
+.calendar-grid {
+  grid-auto-rows: 120px !important;
+}
+
+.day {
+  height: 120px !important;
+  max-height: 120px !important;
+  overflow: hidden !important;
+  position: relative;
+}

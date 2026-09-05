@@ -180,7 +180,7 @@ async function loadClassesAndHomework() {
   .select('*, profiles!calendar_events_created_by_fkey(full_name)')  
   .order('event_date', { ascending: true });
 
-  
+
   calendarEvents = calendarEventsError ? [] : (calendarEventsData || []);
 
   assignments = (homeworkData || []).map(h => ({
@@ -412,7 +412,81 @@ function getCalendarEvents(year, month) {
   });
 }
 
+// Floating "+X more" popover. This lives outside the day grid (appended to
+// <body>) so it is never clipped by a day cell's overflow:hidden, and so it
+// can be positioned wherever there's room instead of being squeezed into a
+// single day box.
+const dayPopover = document.createElement('div');
+dayPopover.className = 'day-popover';
+document.body.appendChild(dayPopover);
+
+let dayItemsMap = {}; // cell index -> array of {type, data} for the currently rendered month
+
+function hideDayPopover() {
+  dayPopover.classList.remove('show');
+  dayPopover.innerHTML = '';
+}
+
+function renderCalendarItemHtml(item) {
+  if (item.type === 'assignment') {
+    const assignment = item.data;
+    const color = getClassColor(assignment.classId);
+    return `
+      <div class="calendar-event ${color.bg} clickable-event"
+           data-title="${escapeHtml(assignment.title)}"
+           data-desc="${escapeHtml(assignment.course)}: ${escapeHtml(assignment.description || 'No description')}"
+           data-teacher="${escapeHtml(assignment.teacher || '')}"
+           data-posted-by="${escapeHtml(assignment.postedBy || '')}"
+           data-posted-date="${escapeHtml(assignment.postedDate || '')}">
+        ${escapeHtml(assignment.title)}
+      </div>
+    `;
+  }
+  const event = item.data;
+  const postedByName = event.profiles?.full_name || 'a moderator';
+  const postedDateFormatted = event.created_at
+    ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(event.created_at))
+    : '';
+  return `
+    <div class="calendar-event event-bg clickable-event"
+         data-title="${escapeHtml(event.title)}"
+         data-desc="${escapeHtml(event.description || 'No description provided.')}"
+         data-posted-by="${escapeHtml(postedByName)}"
+         data-posted-date="${escapeHtml(postedDateFormatted)}">
+      ${escapeHtml(event.title)}
+    </div>
+  `;
+}
+
+function openDayPopover(anchorEl, items) {
+  dayPopover.innerHTML = items.map(renderCalendarItemHtml).join('');
+
+  // Measure off-screen first so we can size/position accurately before showing.
+  dayPopover.style.left = '-9999px';
+  dayPopover.style.top = '-9999px';
+  dayPopover.classList.add('show');
+
+  const anchorRect = anchorEl.getBoundingClientRect();
+  const popRect = dayPopover.getBoundingClientRect();
+
+  let left = anchorRect.left;
+  if (left + popRect.width > window.innerWidth - 8) {
+    left = window.innerWidth - popRect.width - 8;
+  }
+  if (left < 8) left = 8;
+
+  let top = anchorRect.bottom + 4;
+  if (top + popRect.height > window.innerHeight - 8) {
+    top = anchorRect.top - popRect.height - 4;
+  }
+  if (top < 8) top = 8;
+
+  dayPopover.style.left = `${left}px`;
+  dayPopover.style.top = `${top}px`;
+}
+
 function renderCalendar() {
+  hideDayPopover();
   const year = displayedYear;
   const firstDay = new Date(year, displayedMonth, 1).getDay();
   const mondayFirstOffset = (firstDay + 6) % 7;
@@ -443,49 +517,49 @@ function renderCalendar() {
       day === currentDay;
 
     const dayAssignments = monthAssignments.filter(assignment => {
-      return assignment.dueDate.getDate() === day;
+      let dueDate = assignment.dueDate;
+      if (!(dueDate instanceof Date)) {
+        dueDate = new Date(dueDate);
+      }
+      return (
+        dueDate.getFullYear() === year &&
+        dueDate.getMonth() === displayedMonth &&
+        dueDate.getDate() === day
+      );
     });
 
     const dayEvents = monthEvents.filter(event => {
-      const eventDate = new Date(event.event_date + 'T00:00:00');
-      return eventDate.getDate() === day;
+      // Do the same local parsing safety check for events
+      const [eYear, eMonth, eDay] = event.event_date.split('-').map(Number);
+      return (
+        eYear === year &&
+        eMonth - 1 === displayedMonth &&
+        eDay === day
+      );
     });
 
-    const assignmentHtml = dayAssignments.map(assignment => {
-      const color = getClassColor(assignment.classId);
-      return `
-        <div class="calendar-event ${color.bg} clickable-event" 
-             data-title="${escapeHtml(assignment.title)}" 
-             data-desc="${escapeHtml(assignment.course)}: ${escapeHtml(assignment.description || 'No description')}"
-             data-teacher="${escapeHtml(assignment.teacher || '')}"
-             data-posted-by="${escapeHtml(assignment.postedBy || '')}"
-             data-posted-date="${escapeHtml(assignment.postedDate || '')}">
-          ${escapeHtml(assignment.title)}
-        </div>
-      `;
-    }).join('');
+    // Combine into a single array to enforce a maximum limit per day box
+    const allDayItems = [
+      ...dayAssignments.map(a => ({ type: 'assignment', data: a })),
+      ...dayEvents.map(e => ({ type: 'event', data: e }))
+    ];
 
-    const eventHtml = dayEvents.map(event => {
-      const postedByName = event.profiles?.full_name || 'a moderator';
-      const postedDateFormatted = event.created_at
-        ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(event.created_at))
-        : '';
-      return `
-        <div class="calendar-event event-bg clickable-event" 
-             data-title="${escapeHtml(event.title)}" 
-             data-desc="${escapeHtml(event.description || 'No description provided.')}"
-             data-posted-by="${escapeHtml(postedByName)}"
-             data-posted-date="${escapeHtml(postedDateFormatted)}">
-          ${escapeHtml(event.title)}
-        </div>
-      `;
-    }).join('');
+    dayItemsMap[index] = allDayItems;
+
+    const MAX_VISIBLE = 2; // Show up to 2 items, then group the rest into "+X more"
+    const visibleHtml = allDayItems.slice(0, MAX_VISIBLE).map(renderCalendarItemHtml).join('');
+
+    let moreBtn = '';
+    if (allDayItems.length > MAX_VISIBLE) {
+      const hiddenCount = allDayItems.length - MAX_VISIBLE;
+      moreBtn = `<div class="more-events-btn" data-cell="${index}">+${hiddenCount} more</div>`;
+    }
 
     return `
       <div class="day ${isToday ? 'today' : ''}">
         <span>${day}</span>
-        ${assignmentHtml}
-        ${eventHtml}
+        ${visibleHtml}
+        ${moreBtn}
       </div>
     `;
   }).join('');
@@ -493,10 +567,7 @@ function renderCalendar() {
 
 renderCalendar();
 
-grid.addEventListener('click', event => {
-  const clickedItem = event.target.closest('.clickable-event');
-  if (!clickedItem) return;
-  
+function openCalendarItemModal(clickedItem) {
   const title = clickedItem.dataset.title;
   const description = clickedItem.dataset.desc;
   const teacher = clickedItem.dataset.teacher || '';
@@ -505,8 +576,36 @@ grid.addEventListener('click', event => {
 
   const postedPart = postedBy ? `Posted by ${postedBy}${postedDate ? ` (${postedDate})` : ''}` : '';
   const eyebrowText = teacher ? `${teacher}${postedPart ? ` · ${postedPart}` : ''}` : postedPart;
-  
+
   openModal(title, description, 'calendar-event', { eyebrow: eyebrowText });
+}
+
+// Single delegated handler covers clicks both on the calendar grid itself
+// and on the floating day-popover (which lives outside the grid), so the
+// same "click an event -> open details" behavior works in both places.
+document.addEventListener('click', event => {
+  const moreBtn = event.target.closest('.more-events-btn');
+  if (moreBtn) {
+    const alreadyOpenForThisCell =
+      dayPopover.classList.contains('show') && dayPopover.dataset.openCell === moreBtn.dataset.cell;
+    hideDayPopover();
+    if (!alreadyOpenForThisCell) {
+      dayPopover.dataset.openCell = moreBtn.dataset.cell;
+      openDayPopover(moreBtn, dayItemsMap[moreBtn.dataset.cell] || []);
+    }
+    return;
+  }
+
+  const clickedItem = event.target.closest('.clickable-event');
+  if (clickedItem) {
+    openCalendarItemModal(clickedItem);
+    hideDayPopover();
+    return;
+  }
+
+  if (!dayPopover.contains(event.target)) {
+    hideDayPopover();
+  }
 });
 
 document.querySelector('#previousMonth').addEventListener('click', () => {
